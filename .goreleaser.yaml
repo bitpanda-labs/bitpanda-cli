@@ -39,6 +39,18 @@ changelog:
       - "^test:"
       - "^ci:"
 
+nfpms:
+  - id: packages
+    package_name: bp
+    vendor: Bitpanda Labs
+    homepage: "https://github.com/bitpanda-labs/bitpanda-cli"
+    maintainer: "Bitpanda Labs"
+    description: "CLI for Bitpanda Developer API"
+    license: MIT
+    formats:
+      - deb
+      - rpm
+
 brews:
   - name: bp
     repository:
