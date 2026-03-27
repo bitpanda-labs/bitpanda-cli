@@ -1,0 +1,52 @@
+version: 2
+project_name: bitpanda-cli
+
+builds:
+  - id: bp
+    main: ./cmd/bp
+    binary: bp
+    ldflags:
+      - -s -w -X github.com/bitpanda-labs/bitpanda-cli/internal/cli.Version={{.Version}}
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+
+brews:
+  - name: bp
+    repository:
+      owner: bitpanda-labs
+      name: homebrew-tap
+    homepage: "https://github.com/bitpanda-labs/bitpanda-cli"
+    description: "CLI for Bitpanda Developer API"
+    install: |
+      bin.install "bp"
+    test: |
+      system "#{bin}/bp", "--version"
