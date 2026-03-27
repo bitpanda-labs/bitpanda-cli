@@ -9,10 +9,38 @@ A command-line tool for the [Bitpanda Developer API](https://developers.bitpanda
 
 ## Installation
 
-### Homebrew
+### Homebrew (macOS / Linux)
 
 ```bash
 brew install bitpanda-labs/tap/bp
+```
+
+### Shell script (macOS / Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bitpanda-labs/bitpanda-cli/main/install.sh | sh
+```
+
+### Debian / Ubuntu (.deb)
+
+Download the `.deb` package from the [latest release](https://github.com/bitpanda-labs/bitpanda-cli/releases/latest) and install:
+
+```bash
+sudo dpkg -i bp_*_linux_amd64.deb
+```
+
+### Fedora / RHEL (.rpm)
+
+Download the `.rpm` package from the [latest release](https://github.com/bitpanda-labs/bitpanda-cli/releases/latest) and install:
+
+```bash
+sudo rpm -i bp_*_linux_amd64.rpm
+```
+
+### Go
+
+```bash
+go install github.com/bitpanda-labs/bitpanda-cli/cmd/bp@latest
 ```
 
 ### From source
@@ -25,7 +53,7 @@ make install
 
 ### Pre-built binaries
 
-Download from [Releases](https://github.com/bitpanda-labs/bitpanda-cli/releases).
+Download from [Releases](https://github.com/bitpanda-labs/bitpanda-cli/releases/latest).
 
 ## Configuration
 
@@ -161,4 +189,4 @@ make lint     # run linter
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+Apache 2.0 — see [LICENSE](LICENSE) for details.

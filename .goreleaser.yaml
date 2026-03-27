@@ -46,7 +46,7 @@ nfpms:
     homepage: "https://github.com/bitpanda-labs/bitpanda-cli"
     maintainer: "Bitpanda Labs"
     description: "CLI for Bitpanda Developer API"
-    license: MIT
+    license: Apache-2.0
     formats:
       - deb
       - rpm
