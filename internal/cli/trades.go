@@ -16,13 +16,14 @@ func (app *App) registerTrades(parent *cobra.Command) {
 		from      string
 		to        string
 		limit     int
+		all       bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "trades",
 		Short: "Show buy/sell trade history",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return app.runTrades(cmd, operation, assetType, from, to, limit)
+			return app.runTrades(cmd, operation, assetType, from, to, limit, all)
 		},
 	}
 
@@ -31,14 +32,20 @@ func (app *App) registerTrades(parent *cobra.Command) {
 	cmd.Flags().StringVar(&from, "from", "", "From date (ISO 8601, inclusive)")
 	cmd.Flags().StringVar(&to, "to", "", "To date (ISO 8601, exclusive)")
 	cmd.Flags().IntVar(&limit, "limit", 0, "Maximum number of trades (0 = all)")
+	cmd.Flags().BoolVar(&all, "all", false, "Fetch all pages (may be slow with many trades)")
 	parent.AddCommand(cmd)
 }
 
-func (app *App) runTrades(cmd *cobra.Command, operation, assetType, from, to string, limit int) error {
+func (app *App) runTrades(cmd *cobra.Command, operation, assetType, from, to string, limit int, all bool) error {
 	ctx := cmd.Context()
 
-	// Fetch more transactions than the limit when asset-type filtering is needed
+	// Default to fetching one page (100 transactions) unless --all or --limit is set.
 	fetchLimit := limit
+	if !all && fetchLimit == 0 {
+		fetchLimit = 100
+	}
+
+	// Fetch more transactions than the limit when asset-type filtering is needed
 	if assetType != "" && fetchLimit > 0 {
 		fetchLimit = fetchLimit * 10
 	}
