@@ -102,7 +102,8 @@ bp balances --limit 10       # cap results
 ### Trades
 
 ```bash
-bp trades                          # recent buy/sell trades
+bp trades                          # recent trades (first page)
+bp trades --all                    # full trade history (may be slow)
 bp trades --operation buy          # only buys
 bp trades --asset-type cryptocoin  # only crypto trades
 bp trades --from 2024-01-01 --to 2024-06-30
@@ -112,7 +113,8 @@ bp trades --limit 20
 ### Transactions
 
 ```bash
-bp transactions                       # all transactions
+bp transactions                       # recent transactions (first page)
+bp transactions --all                 # full transaction history (may be slow)
 bp transactions --flow incoming       # only incoming
 bp transactions --wallet-id UUID
 bp transactions --from 2024-01-01 --to 2024-12-31

@@ -4,208 +4,154 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
-
 )
 
-func TestRunTrades_FiltersBuyOnly(t *testing.T) {
-	server := newMockServer(t, mockEndpoints{
-		"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(paginatedJSON(t, []map[string]interface{}{
+// btcTickerHandler returns a ticker with a single BTC entry.
+func btcTickerHandler(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Write(paginatedJSON(t, []map[string]string{
+			{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
+		}))
+	}
+}
+
+func TestRunTrades_OperationFilter(t *testing.T) {
+	tests := []struct {
+		name      string
+		txns      []map[string]interface{}
+		operation string
+		wantCount int
+		wantOp    string // if set, all rows must have this operation
+		wantID    string // if set, first row must have this trade ID
+	}{
+		{
+			name: "buy filter returns only buys",
+			txns: []map[string]interface{}{
 				{"transaction_id": "tx1", "asset_id": "a1", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
 				{"transaction_id": "tx2", "asset_id": "a1", "trade_id": "t2", "flow": "incoming", "operation_type": "sell", "asset_amount": "0.5", "credited_at": "2024-01-02"},
 				{"transaction_id": "tx3", "asset_id": "a1", "trade_id": "t3", "flow": "incoming", "operation_type": "buy", "asset_amount": "2.0", "credited_at": "2024-01-03"},
-			}))
+			},
+			operation: "buy",
+			wantCount: 2,
+			wantOp:    "buy",
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
-		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
-			}))
-		},
-	})
-	defer server.Close()
-
-	app := newTestApp(server.URL)
-	cmd := newTestCmd()
-
-	var raw string
-	var runErr error
-	raw = captureStdout(t, func() {
-		runErr = app.runTrades(cmd, "buy", "", "", "", 0)
-	})
-	if runErr != nil {
-		t.Fatalf("unexpected error: %v", runErr)
-	}
-
-	rows := parseJSONOutput(t, raw)
-	if len(rows) != 2 {
-		t.Fatalf("expected 2 buy trades, got %d", len(rows))
-	}
-	for _, row := range rows {
-		if row["Operation"] != "buy" {
-			t.Errorf("expected operation 'buy', got %s", row["Operation"])
-		}
-	}
-}
-
-func TestRunTrades_FiltersSellOnly(t *testing.T) {
-	server := newMockServer(t, mockEndpoints{
-		"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(paginatedJSON(t, []map[string]interface{}{
+		{
+			name: "sell filter returns only sells",
+			txns: []map[string]interface{}{
 				{"transaction_id": "tx1", "asset_id": "a1", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
 				{"transaction_id": "tx2", "asset_id": "a1", "trade_id": "t2", "flow": "incoming", "operation_type": "sell", "asset_amount": "0.5", "credited_at": "2024-01-02"},
-			}))
+			},
+			operation: "sell",
+			wantCount: 1,
+			wantOp:    "sell",
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
-		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
-			}))
-		},
-	})
-	defer server.Close()
-
-	app := newTestApp(server.URL)
-	cmd := newTestCmd()
-
-	var raw string
-	var runErr error
-	raw = captureStdout(t, func() {
-		runErr = app.runTrades(cmd, "sell", "", "", "", 0)
-	})
-	if runErr != nil {
-		t.Fatalf("unexpected error: %v", runErr)
-	}
-
-	rows := parseJSONOutput(t, raw)
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 sell trade, got %d", len(rows))
-	}
-	if rows[0]["Operation"] != "sell" {
-		t.Errorf("expected operation 'sell', got %s", rows[0]["Operation"])
-	}
-}
-
-func TestRunTrades_ExcludesNonTradeTransactions(t *testing.T) {
-	// Transactions without trade_id or not incoming should be excluded.
-	server := newMockServer(t, mockEndpoints{
-		"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(paginatedJSON(t, []map[string]interface{}{
-				// Valid trade
+		{
+			name: "no filter excludes non-trade transactions",
+			txns: []map[string]interface{}{
+				// valid trade
 				{"transaction_id": "tx1", "asset_id": "a1", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
-				// No trade_id (not a trade)
+				// no trade_id
 				{"transaction_id": "tx2", "asset_id": "a1", "trade_id": "", "flow": "incoming", "operation_type": "deposit", "asset_amount": "2.0", "credited_at": "2024-01-02"},
-				// Outgoing flow (not the trade incoming side)
+				// outgoing flow
 				{"transaction_id": "tx3", "asset_id": "a1", "trade_id": "t2", "flow": "outgoing", "operation_type": "buy", "asset_amount": "0.5", "credited_at": "2024-01-03"},
-				// Non buy/sell operation type (should be filtered when operation is empty)
+				// non buy/sell operation
 				{"transaction_id": "tx4", "asset_id": "a1", "trade_id": "t3", "flow": "incoming", "operation_type": "transfer", "asset_amount": "0.1", "credited_at": "2024-01-04"},
-			}))
+			},
+			operation: "",
+			wantCount: 1,
+			wantID:    "t1",
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
-		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
-			}))
-		},
-	})
-	defer server.Close()
-
-	app := newTestApp(server.URL)
-	cmd := newTestCmd()
-
-	var raw string
-	var runErr error
-	raw = captureStdout(t, func() {
-		// No operation filter => only buy/sell incoming trades
-		runErr = app.runTrades(cmd, "", "", "", "", 0)
-	})
-	if runErr != nil {
-		t.Fatalf("unexpected error: %v", runErr)
 	}
 
-	rows := parseJSONOutput(t, raw)
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 trade (only valid buy), got %d", len(rows))
-	}
-	if rows[0]["Trade ID"] != "t1" {
-		t.Errorf("expected trade t1, got %s", rows[0]["Trade ID"])
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := newMockServer(t, mockEndpoints{
+				"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
+					w.Write(paginatedJSON(t, tc.txns))
+				},
+				"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
+				"/v1/ticker": btcTickerHandler(t),
+			})
+			defer server.Close()
+
+			app := newTestApp(server.URL)
+			cmd := newTestCmd()
+
+			var runErr error
+			raw := captureStdout(t, func() {
+				runErr = app.runTrades(cmd, tc.operation, "", "", "", 0, true)
+			})
+			if runErr != nil {
+				t.Fatalf("unexpected error: %v", runErr)
+			}
+
+			rows := parseJSONOutput(t, raw)
+			if len(rows) != tc.wantCount {
+				t.Fatalf("expected %d rows, got %d", tc.wantCount, len(rows))
+			}
+			for _, row := range rows {
+				if tc.wantOp != "" && row["Operation"] != tc.wantOp {
+					t.Errorf("expected operation %q, got %q", tc.wantOp, row["Operation"])
+				}
+			}
+			if tc.wantID != "" && len(rows) > 0 && rows[0]["Trade ID"] != tc.wantID {
+				t.Errorf("expected trade ID %q, got %q", tc.wantID, rows[0]["Trade ID"])
+			}
+		})
 	}
 }
 
 func TestRunTrades_AssetTypeFilter(t *testing.T) {
-	server := newMockServer(t, mockEndpoints{
-		"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(paginatedJSON(t, []map[string]interface{}{
-				{"transaction_id": "tx1", "asset_id": "a1", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
-				{"transaction_id": "tx2", "asset_id": "a2", "trade_id": "t2", "flow": "incoming", "operation_type": "buy", "asset_amount": "10.0", "credited_at": "2024-01-02"},
-			}))
-		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}, []string{"a2", "Gold", "XAU"}),
-		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
-				{"id": "t2", "symbol": "XAU", "type": "metal", "currency": "EUR", "price": "2000.00"},
-			}))
-		},
-	})
-	defer server.Close()
-
-	app := newTestApp(server.URL)
-	cmd := newTestCmd()
-
-	var raw string
-	var runErr error
-	raw = captureStdout(t, func() {
-		runErr = app.runTrades(cmd, "", "metal", "", "", 0)
-	})
-	if runErr != nil {
-		t.Fatalf("unexpected error: %v", runErr)
+	tests := []struct {
+		name      string
+		assetType string
+		wantCount int
+		wantSym   string
+	}{
+		{"metal filter returns XAU", "metal", 1, "XAU"},
+		{"stock filter returns nothing", "stock", 0, ""},
+		{"cryptocoin filter returns BTC", "cryptocoin", 1, "BTC"},
 	}
 
-	rows := parseJSONOutput(t, raw)
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 metal trade, got %d", len(rows))
-	}
-	if rows[0]["Symbol"] != "XAU" {
-		t.Errorf("expected XAU, got %s", rows[0]["Symbol"])
-	}
-	if rows[0]["Type"] != "metal" {
-		t.Errorf("expected type metal, got %s", rows[0]["Type"])
-	}
-}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := newMockServer(t, mockEndpoints{
+				"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
+					w.Write(paginatedJSON(t, []map[string]interface{}{
+						{"transaction_id": "tx1", "asset_id": "a1", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
+						{"transaction_id": "tx2", "asset_id": "a2", "trade_id": "t2", "flow": "incoming", "operation_type": "buy", "asset_amount": "10.0", "credited_at": "2024-01-02"},
+					}))
+				},
+				"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}, []string{"a2", "Gold", "XAU"}),
+				"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
+					w.Write(paginatedJSON(t, []map[string]string{
+						{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
+						{"id": "t2", "symbol": "XAU", "type": "metal", "currency": "EUR", "price": "2000.00"},
+					}))
+				},
+			})
+			defer server.Close()
 
-func TestRunTrades_AssetTypeFilterRemovesAll(t *testing.T) {
-	server := newMockServer(t, mockEndpoints{
-		"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(paginatedJSON(t, []map[string]interface{}{
-				{"transaction_id": "tx1", "asset_id": "a1", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
-			}))
-		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
-		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
-			}))
-		},
-	})
-	defer server.Close()
+			app := newTestApp(server.URL)
+			cmd := newTestCmd()
 
-	app := newTestApp(server.URL)
-	cmd := newTestCmd()
+			var runErr error
+			raw := captureStdout(t, func() {
+				runErr = app.runTrades(cmd, "", tc.assetType, "", "", 0, true)
+			})
+			if runErr != nil {
+				t.Fatalf("unexpected error: %v", runErr)
+			}
 
-	var raw string
-	var runErr error
-	raw = captureStdout(t, func() {
-		// Filter by "stock" which doesn't match BTC (cryptocoin)
-		runErr = app.runTrades(cmd, "", "stock", "", "", 0)
-	})
-	if runErr != nil {
-		t.Fatalf("unexpected error: %v", runErr)
-	}
-
-	rows := parseJSONOutput(t, raw)
-	if len(rows) != 0 {
-		t.Fatalf("expected 0 rows when filter removes all trades, got %d", len(rows))
+			rows := parseJSONOutput(t, raw)
+			if len(rows) != tc.wantCount {
+				t.Fatalf("expected %d rows, got %d", tc.wantCount, len(rows))
+			}
+			if tc.wantSym != "" && len(rows) > 0 && rows[0]["Symbol"] != tc.wantSym {
+				t.Errorf("expected symbol %q, got %q", tc.wantSym, rows[0]["Symbol"])
+			}
+		})
 	}
 }
 
@@ -219,21 +165,16 @@ func TestRunTrades_LimitApplied(t *testing.T) {
 			}))
 		},
 		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
-		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
-			}))
-		},
+		"/v1/ticker": btcTickerHandler(t),
 	})
 	defer server.Close()
 
 	app := newTestApp(server.URL)
 	cmd := newTestCmd()
 
-	var raw string
 	var runErr error
-	raw = captureStdout(t, func() {
-		runErr = app.runTrades(cmd, "", "", "", "", 2)
+	raw := captureStdout(t, func() {
+		runErr = app.runTrades(cmd, "", "", "", "", 2, false)
 	})
 	if runErr != nil {
 		t.Fatalf("unexpected error: %v", runErr)
@@ -246,18 +187,17 @@ func TestRunTrades_LimitApplied(t *testing.T) {
 }
 
 func TestRunTrades_FetchLimitHeuristic(t *testing.T) {
-	// When asset-type filter is set with a limit, the API should be called
-	// with fetchLimit = limit * 10 to account for post-fetch filtering.
+	// limit=3 with --asset-type sets fetchLimit=3*10=30 to account for client-side filtering.
 	server := newMockServer(t, mockEndpoints{
 		"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
-			// Return 50 transactions: 5 are metal, rest are crypto
-			txns := make([]map[string]interface{}, 0, 50)
-			for i := 0; i < 50; i++ {
-				assetID := "a1" // crypto
+			// 50 transactions: every 10th is metal, rest are crypto
+			txns := make([]map[string]interface{}, 50)
+			for i := range txns {
+				assetID := "a1"
 				if i%10 == 0 {
-					assetID = "a2" // metal (5 of 50)
+					assetID = "a2"
 				}
-				txns = append(txns, map[string]interface{}{
+				txns[i] = map[string]interface{}{
 					"transaction_id": "tx" + strconv.Itoa(i),
 					"asset_id":       assetID,
 					"trade_id":       "trade" + strconv.Itoa(i),
@@ -265,7 +205,7 @@ func TestRunTrades_FetchLimitHeuristic(t *testing.T) {
 					"operation_type": "buy",
 					"asset_amount":   "1.0",
 					"credited_at":    "2024-01-01",
-				})
+				}
 			}
 			w.Write(paginatedJSON(t, txns))
 		},
@@ -282,18 +222,15 @@ func TestRunTrades_FetchLimitHeuristic(t *testing.T) {
 	app := newTestApp(server.URL)
 	cmd := newTestCmd()
 
-	var raw string
 	var runErr error
-	raw = captureStdout(t, func() {
-		// limit=3, asset-type=metal => fetchLimit should be 3*10=30
-		runErr = app.runTrades(cmd, "", "metal", "", "", 3)
+	raw := captureStdout(t, func() {
+		runErr = app.runTrades(cmd, "", "metal", "", "", 3, false)
 	})
 	if runErr != nil {
 		t.Fatalf("unexpected error: %v", runErr)
 	}
 
 	rows := parseJSONOutput(t, raw)
-	// We have 5 metal trades in 50 transactions, limited to 3
 	if len(rows) != 3 {
 		t.Fatalf("expected 3 rows after limit, got %d", len(rows))
 	}
@@ -304,8 +241,8 @@ func TestRunTrades_FetchLimitHeuristic(t *testing.T) {
 	}
 }
 
-func TestRunTrades_NoLimitWithAssetType(t *testing.T) {
-	// When limit=0, fetchLimit should remain 0 (no multiplication).
+func TestRunTrades_AllFlagWithAssetType(t *testing.T) {
+	// --all with --asset-type: fetchLimit stays 0 (no cap, no multiplication).
 	server := newMockServer(t, mockEndpoints{
 		"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]interface{}{
@@ -313,21 +250,47 @@ func TestRunTrades_NoLimitWithAssetType(t *testing.T) {
 			}))
 		},
 		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
-		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
-			}))
-		},
+		"/v1/ticker": btcTickerHandler(t),
 	})
 	defer server.Close()
 
 	app := newTestApp(server.URL)
 	cmd := newTestCmd()
 
-	var raw string
 	var runErr error
-	raw = captureStdout(t, func() {
-		runErr = app.runTrades(cmd, "", "cryptocoin", "", "", 0)
+	raw := captureStdout(t, func() {
+		runErr = app.runTrades(cmd, "", "cryptocoin", "", "", 0, true)
+	})
+	if runErr != nil {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+
+	rows := parseJSONOutput(t, raw)
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+}
+
+func TestRunTrades_DefaultCapWithAssetType(t *testing.T) {
+	// Without --all or --limit, default cap (100) is applied, then multiplied by 10
+	// for asset-type filtering (fetchLimit=1000).
+	server := newMockServer(t, mockEndpoints{
+		"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
+			w.Write(paginatedJSON(t, []map[string]interface{}{
+				{"transaction_id": "tx1", "asset_id": "a1", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
+			}))
+		},
+		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
+		"/v1/ticker": btcTickerHandler(t),
+	})
+	defer server.Close()
+
+	app := newTestApp(server.URL)
+	cmd := newTestCmd()
+
+	var runErr error
+	raw := captureStdout(t, func() {
+		runErr = app.runTrades(cmd, "", "cryptocoin", "", "", 0, false)
 	})
 	if runErr != nil {
 		t.Fatalf("unexpected error: %v", runErr)
@@ -354,10 +317,9 @@ func TestRunTrades_EmptyTransactions(t *testing.T) {
 	app := newTestApp(server.URL)
 	cmd := newTestCmd()
 
-	var raw string
 	var runErr error
-	raw = captureStdout(t, func() {
-		runErr = app.runTrades(cmd, "", "", "", "", 0)
+	raw := captureStdout(t, func() {
+		runErr = app.runTrades(cmd, "", "", "", "", 0, true)
 	})
 	if runErr != nil {
 		t.Fatalf("unexpected error: %v", runErr)
@@ -365,7 +327,7 @@ func TestRunTrades_EmptyTransactions(t *testing.T) {
 
 	rows := parseJSONOutput(t, raw)
 	if len(rows) != 0 {
-		t.Fatalf("expected 0 rows for empty transactions, got %d", len(rows))
+		t.Fatalf("expected 0 rows, got %d", len(rows))
 	}
 }
 
@@ -388,10 +350,9 @@ func TestRunTrades_EURPriceFormatted(t *testing.T) {
 	app := newTestApp(server.URL)
 	cmd := newTestCmd()
 
-	var raw string
 	var runErr error
-	raw = captureStdout(t, func() {
-		runErr = app.runTrades(cmd, "", "", "", "", 0)
+	raw := captureStdout(t, func() {
+		runErr = app.runTrades(cmd, "", "", "", "", 0, true)
 	})
 	if runErr != nil {
 		t.Fatalf("unexpected error: %v", runErr)
@@ -401,7 +362,6 @@ func TestRunTrades_EURPriceFormatted(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(rows))
 	}
-	// Price should be formatted to 2 decimal places
 	if rows[0]["EUR Price"] != "95123.46" {
 		t.Errorf("expected formatted price 95123.46, got %s", rows[0]["EUR Price"])
 	}
@@ -414,7 +374,7 @@ func TestRunTrades_UnknownAssetShowsUnknown(t *testing.T) {
 				{"transaction_id": "tx1", "asset_id": "unknown-id", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t), // empty list, so unknown-id won't resolve
+		"/v1/assets": assetsListHandler(t),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{}))
 		},
@@ -425,10 +385,9 @@ func TestRunTrades_UnknownAssetShowsUnknown(t *testing.T) {
 	cmd := newTestCmd()
 	cmd.SetErr(&nopWriter{})
 
-	var raw string
 	var runErr error
-	raw = captureStdout(t, func() {
-		runErr = app.runTrades(cmd, "", "", "", "", 0)
+	raw := captureStdout(t, func() {
+		runErr = app.runTrades(cmd, "", "", "", "", 0, true)
 	})
 	if runErr != nil {
 		t.Fatalf("unexpected error: %v", runErr)

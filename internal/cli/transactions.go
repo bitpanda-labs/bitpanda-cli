@@ -15,13 +15,14 @@ func (app *App) registerTransactions(parent *cobra.Command) {
 		to       string
 		limit    int
 		pageSize int
+		all      bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "transactions",
 		Short: "List all transactions",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return app.runTransactions(cmd, walletID, flow, assetID, from, to, limit, pageSize)
+			return app.runTransactions(cmd, walletID, flow, assetID, from, to, limit, pageSize, all)
 		},
 	}
 
@@ -30,12 +31,18 @@ func (app *App) registerTransactions(parent *cobra.Command) {
 	cmd.Flags().StringVar(&assetID, "asset-id", "", "Filter by asset UUID")
 	cmd.Flags().StringVar(&from, "from", "", "From date (ISO 8601, inclusive)")
 	cmd.Flags().StringVar(&to, "to", "", "To date (ISO 8601, exclusive)")
-	cmd.Flags().IntVar(&limit, "limit", 0, "Maximum number of results (0 = all)")
+	cmd.Flags().IntVar(&limit, "limit", 0, "Maximum number of results")
 	cmd.Flags().IntVar(&pageSize, "page-size", 25, "Items per API page (1-100)")
+	cmd.Flags().BoolVar(&all, "all", false, "Fetch all pages (may be slow with many transactions)")
 	parent.AddCommand(cmd)
 }
 
-func (app *App) runTransactions(cmd *cobra.Command, walletID, flow, assetID, from, to string, limit, pageSize int) error {
+func (app *App) runTransactions(cmd *cobra.Command, walletID, flow, assetID, from, to string, limit, pageSize int, all bool) error {
+	fetchLimit := limit
+	if !all && fetchLimit == 0 {
+		fetchLimit = pageSize
+	}
+
 	txns, err := app.apiClient.ListTransactions(cmd.Context(), api.TransactionParams{
 		WalletID: walletID,
 		Flow:     flow,
@@ -43,7 +50,7 @@ func (app *App) runTransactions(cmd *cobra.Command, walletID, flow, assetID, fro
 		From:     from,
 		To:       to,
 		PageSize: pageSize,
-		Limit:    limit,
+		Limit:    fetchLimit,
 	})
 	if err != nil {
 		return err

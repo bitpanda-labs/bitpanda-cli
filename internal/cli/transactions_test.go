@@ -30,7 +30,7 @@ func TestRunTransactions_BasicList(t *testing.T) {
 	var raw string
 	var runErr error
 	raw = captureStdout(t, func() {
-		runErr = app.runTransactions(cmd, "", "", "", "", "", 0, 25)
+		runErr = app.runTransactions(cmd, "", "", "", "", "", 0, 25, true)
 	})
 	if runErr != nil {
 		t.Fatalf("unexpected error: %v", runErr)
@@ -68,7 +68,7 @@ func TestRunTransactions_EmptyList(t *testing.T) {
 	var raw string
 	var runErr error
 	raw = captureStdout(t, func() {
-		runErr = app.runTransactions(cmd, "", "", "", "", "", 0, 25)
+		runErr = app.runTransactions(cmd, "", "", "", "", "", 0, 25, true)
 	})
 	if runErr != nil {
 		t.Fatalf("unexpected error: %v", runErr)
@@ -116,7 +116,7 @@ func TestRunTransactions_FilterParamsForwarded(t *testing.T) {
 	var raw string
 	var runErr error
 	raw = captureStdout(t, func() {
-		runErr = app.runTransactions(cmd, "w1", "incoming", "a1", "2024-01-01", "2024-02-01", 0, 25)
+		runErr = app.runTransactions(cmd, "w1", "incoming", "a1", "2024-01-01", "2024-02-01", 0, 25, true)
 	})
 	if runErr != nil {
 		t.Fatalf("unexpected error: %v", runErr)
@@ -148,7 +148,7 @@ func TestRunTransactions_OutputColumns(t *testing.T) {
 	var raw string
 	var runErr error
 	raw = captureStdout(t, func() {
-		runErr = app.runTransactions(cmd, "", "", "", "", "", 0, 25)
+		runErr = app.runTransactions(cmd, "", "", "", "", "", 0, 25, true)
 	})
 	if runErr != nil {
 		t.Fatalf("unexpected error: %v", runErr)
@@ -197,7 +197,7 @@ func TestRunTransactions_APIError(t *testing.T) {
 	app := newTestApp(server.URL)
 	cmd := newTestCmd()
 
-	err := app.runTransactions(cmd, "", "", "", "", "", 0, 25)
+	err := app.runTransactions(cmd, "", "", "", "", "", 0, 25, true)
 	if err == nil {
 		t.Fatal("expected error for API failure")
 	}
