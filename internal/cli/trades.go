@@ -78,14 +78,7 @@ func (app *App) runTrades(cmd *cobra.Command, operation, assetType, from, to str
 		trades = append(trades, t)
 	}
 
-	// Resolve all asset names in a single batch request
-	assetMap, err := app.apiClient.ListAllAssets(ctx)
-	if err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: could not fetch assets: %v\n", err)
-		assetMap = make(map[string]api.AssetData)
-	}
-
-	// Fetch ticker for asset type mapping and current prices
+	// Fetch ticker — provides name, symbol, type, and price keyed by asset ID
 	ticker, err := app.apiClient.FetchAllTicker(ctx)
 	if err != nil {
 		return fmt.Errorf("fetching prices: %w", err)
@@ -105,19 +98,17 @@ func (app *App) runTrades(cmd *cobra.Command, operation, assetType, from, to str
 
 	var enriched []enrichedTrade
 	for _, t := range trades {
-		asset, found := assetMap[t.AssetID]
-		symbol := "unknown"
 		name := "unknown"
-		if found {
-			symbol = asset.Symbol
-			name = asset.Name
-		}
-
+		symbol := "unknown"
 		aType := "unknown"
 		eurPrice := "N/A"
-		if te, found := ticker[symbol]; found {
+		if te, found := ticker.ByID[t.AssetID]; found {
+			name = te.Name
+			symbol = te.Symbol
 			aType = te.Type
 			eurPrice = te.Price
+		} else {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: asset %s not found in ticker\n", t.AssetID)
 		}
 
 		if assetType != "" && aType != assetType {

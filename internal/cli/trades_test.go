@@ -11,7 +11,7 @@ func btcTickerHandler(t *testing.T) http.HandlerFunc {
 	t.Helper()
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Write(paginatedJSON(t, []map[string]string{
-			{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
+			{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
 		}))
 	}
 }
@@ -70,7 +70,6 @@ func TestRunTrades_OperationFilter(t *testing.T) {
 				"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
 					w.Write(paginatedJSON(t, tc.txns))
 				},
-				"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
 				"/v1/ticker": btcTickerHandler(t),
 			})
 			defer server.Close()
@@ -123,11 +122,10 @@ func TestRunTrades_AssetTypeFilter(t *testing.T) {
 						{"transaction_id": "tx2", "asset_id": "a2", "trade_id": "t2", "flow": "incoming", "operation_type": "buy", "asset_amount": "10.0", "credited_at": "2024-01-02"},
 					}))
 				},
-				"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}, []string{"a2", "Gold", "XAU"}),
 				"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 					w.Write(paginatedJSON(t, []map[string]string{
-						{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
-						{"id": "t2", "symbol": "XAU", "type": "metal", "currency": "EUR", "price": "2000.00"},
+						{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
+						{"id": "a2", "name": "Gold", "symbol": "XAU", "type": "metal", "currency": "EUR", "price": "2000.00"},
 					}))
 				},
 			})
@@ -164,7 +162,6 @@ func TestRunTrades_LimitApplied(t *testing.T) {
 				{"transaction_id": "tx3", "asset_id": "a1", "trade_id": "t3", "flow": "incoming", "operation_type": "buy", "asset_amount": "3.0", "credited_at": "2024-01-03"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
 		"/v1/ticker": btcTickerHandler(t),
 	})
 	defer server.Close()
@@ -209,11 +206,10 @@ func TestRunTrades_FetchLimitHeuristic(t *testing.T) {
 			}
 			w.Write(paginatedJSON(t, txns))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}, []string{"a2", "Gold", "XAU"}),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
-				{"id": "t2", "symbol": "XAU", "type": "metal", "currency": "EUR", "price": "2000.00"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
+				{"id": "a2", "name": "Gold", "symbol": "XAU", "type": "metal", "currency": "EUR", "price": "2000.00"},
 			}))
 		},
 	})
@@ -249,7 +245,6 @@ func TestRunTrades_AllFlagWithAssetType(t *testing.T) {
 				{"transaction_id": "tx1", "asset_id": "a1", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
 		"/v1/ticker": btcTickerHandler(t),
 	})
 	defer server.Close()
@@ -280,7 +275,6 @@ func TestRunTrades_DefaultCapWithAssetType(t *testing.T) {
 				{"transaction_id": "tx1", "asset_id": "a1", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
 		"/v1/ticker": btcTickerHandler(t),
 	})
 	defer server.Close()
@@ -307,7 +301,6 @@ func TestRunTrades_EmptyTransactions(t *testing.T) {
 		"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]interface{}{}))
 		},
-		"/v1/assets": assetsListHandler(t),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{}))
 		},
@@ -338,10 +331,9 @@ func TestRunTrades_EURPriceFormatted(t *testing.T) {
 				{"transaction_id": "tx1", "asset_id": "a1", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "95123.456789"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "95123.456789"},
 			}))
 		},
 	})
@@ -374,7 +366,6 @@ func TestRunTrades_UnknownAssetShowsUnknown(t *testing.T) {
 				{"transaction_id": "tx1", "asset_id": "unknown-id", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{}))
 		},

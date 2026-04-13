@@ -458,12 +458,12 @@ func TestGetAsset_NotFound(t *testing.T) {
 	}
 }
 
-func TestFetchAllTicker_KeyedBySymbol(t *testing.T) {
+func TestFetchAllTicker_KeyedBySymbolAndID(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := PaginatedResponse{
 			Data: json.RawMessage(`[
-				{"id":"1","symbol":"BTC","type":"cryptocoin","currency":"EUR","price":"50000","price_change_day":"-2.5"},
-				{"id":"2","symbol":"ETH","type":"cryptocoin","currency":"EUR","price":"3000","price_change_day":"1.2"}
+				{"id":"a1","name":"Bitcoin","symbol":"BTC","type":"cryptocoin","currency":"EUR","price":"50000","price_change_day":"-2.5"},
+				{"id":"a2","name":"Ethereum","symbol":"ETH","type":"cryptocoin","currency":"EUR","price":"3000","price_change_day":"1.2"}
 			]`),
 			HasNextPage: false,
 		}
@@ -478,18 +478,28 @@ func TestFetchAllTicker_KeyedBySymbol(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(ticker) != 2 {
-		t.Fatalf("got %d entries, want 2", len(ticker))
+	if len(ticker.BySymbol) != 2 {
+		t.Fatalf("got %d BySymbol entries, want 2", len(ticker.BySymbol))
 	}
-	btc, ok := ticker["BTC"]
+	if len(ticker.ByID) != 2 {
+		t.Fatalf("got %d ByID entries, want 2", len(ticker.ByID))
+	}
+	btc, ok := ticker.BySymbol["BTC"]
 	if !ok {
-		t.Fatal("BTC not found in ticker map")
+		t.Fatal("BTC not found in BySymbol map")
 	}
 	if btc.Price != "50000" {
 		t.Errorf("BTC price = %q, want %q", btc.Price, "50000")
 	}
-	if btc.PriceChangeDay != "-2.5" {
-		t.Errorf("BTC price_change_day = %q, want %q", btc.PriceChangeDay, "-2.5")
+	if btc.Name != "Bitcoin" {
+		t.Errorf("BTC name = %q, want %q", btc.Name, "Bitcoin")
+	}
+	btcByID, ok := ticker.ByID["a1"]
+	if !ok {
+		t.Fatal("a1 not found in ByID map")
+	}
+	if btcByID.Symbol != "BTC" {
+		t.Errorf("a1 symbol = %q, want %q", btcByID.Symbol, "BTC")
 	}
 }
 
