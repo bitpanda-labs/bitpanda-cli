@@ -78,11 +78,11 @@ func richMockServer(t *testing.T) *httptest.Server {
 		case strings.HasPrefix(r.URL.Path, "/v1/ticker"):
 			json.NewEncoder(w).Encode(map[string]any{
 				"data": []map[string]any{
-					{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "95000.00", "price_change_day": "1.5"},
-					{"id": "t2", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3500.00", "price_change_day": "-0.8"},
-					{"id": "t3", "symbol": "ADA", "type": "cryptocoin", "currency": "EUR", "price": "0.45", "price_change_day": "3.2"},
-					{"id": "t4", "symbol": "AAPL", "type": "stock", "currency": "EUR", "price": "180.50", "price_change_day": "0.3"},
-					{"id": "t5", "symbol": "XAUG", "type": "metal", "currency": "EUR", "price": "2300.00", "price_change_day": "0.1"},
+					{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "95000.00", "price_change_day": "1.5"},
+					{"id": "a2", "name": "Ethereum", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3500.00", "price_change_day": "-0.8"},
+					{"id": "a3", "name": "Cardano", "symbol": "ADA", "type": "cryptocoin", "currency": "EUR", "price": "0.45", "price_change_day": "3.2"},
+					{"id": "a4", "name": "Apple", "symbol": "AAPL", "type": "stock", "currency": "EUR", "price": "180.50", "price_change_day": "0.3"},
+					{"id": "a5", "name": "Gold", "symbol": "XAUG", "type": "metal", "currency": "EUR", "price": "2300.00", "price_change_day": "0.1"},
 				},
 				"has_next_page": false,
 				"next_cursor":   "",

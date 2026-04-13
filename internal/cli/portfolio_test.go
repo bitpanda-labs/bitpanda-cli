@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-
 )
 
 func TestRunPortfolio_AggregatesMultipleWalletsSameAsset(t *testing.T) {
@@ -17,10 +16,9 @@ func TestRunPortfolio_AggregatesMultipleWalletsSameAsset(t *testing.T) {
 				{"wallet_id": "w2", "asset_id": "a1", "wallet_type": "STAKING", "balance": "0.5"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "100000.00"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "100000.00"},
 			}))
 		},
 	})
@@ -73,11 +71,10 @@ func TestRunPortfolio_MultipleAssets(t *testing.T) {
 				{"wallet_id": "w2", "asset_id": "a2", "wallet_type": "", "balance": "10.0"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}, []string{"a2", "Ethereum", "ETH"}),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
-				{"id": "t2", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3000.00"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
+				{"id": "a2", "name": "Ethereum", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3000.00"},
 			}))
 		},
 	})
@@ -123,11 +120,10 @@ func TestRunPortfolio_SortByValue(t *testing.T) {
 				{"wallet_id": "w2", "asset_id": "a2", "wallet_type": "", "balance": "100.0"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}, []string{"a2", "Ethereum", "ETH"}),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
-				{"id": "t2", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3000.00"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
+				{"id": "a2", "name": "Ethereum", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3000.00"},
 			}))
 		},
 	})
@@ -164,10 +160,9 @@ func TestRunPortfolio_FiltersZeroBalances(t *testing.T) {
 				{"wallet_id": "w2", "asset_id": "a2", "wallet_type": "", "balance": "5.0"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a2", "Ethereum", "ETH"}),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t2", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3000.00"},
+				{"id": "a2", "name": "Ethereum", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3000.00"},
 			}))
 		},
 	})
@@ -266,7 +261,6 @@ func TestRunPortfolio_AssetWithNoTickerPrice(t *testing.T) {
 				{"wallet_id": "w1", "asset_id": "a1", "wallet_type": "", "balance": "10.0"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "SomeCoin", "SOME"}),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			// Empty ticker
 			w.Write(paginatedJSON(t, []map[string]string{}))
@@ -306,10 +300,9 @@ func TestRunPortfolio_InvalidBalanceSkipped(t *testing.T) {
 				{"wallet_id": "w2", "asset_id": "a2", "wallet_type": "", "balance": "5.0"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a2", "Ethereum", "ETH"}),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t2", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3000.00"},
+				{"id": "a2", "name": "Ethereum", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3000.00"},
 			}))
 		},
 	})
@@ -353,10 +346,9 @@ func TestRunPortfolio_WalletTypeAggregation(t *testing.T) {
 				{"wallet_id": "w3", "asset_id": "a1", "wallet_type": "SAVINGS", "balance": "1.0"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "10000.00"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "10000.00"},
 			}))
 		},
 	})
@@ -415,12 +407,11 @@ func TestRunPortfolio_InvalidTickerPrice(t *testing.T) {
 				{"wallet_id": "w1", "asset_id": "a1", "wallet_type": "", "balance": "5.0"},
 			}))
 		},
-		"/v1/assets": assetsListHandler(t, []string{"a1", "Bitcoin", "BTC"}),
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			// Ticker entry with invalid price
 			resp, _ := json.Marshal(map[string]interface{}{
 				"data": []map[string]string{
-					{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "bad-price"},
+					{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "bad-price"},
 				},
 				"has_next_page": false,
 				"next_cursor":   "",

@@ -32,7 +32,7 @@ func (app *App) runPrice(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	entry, found := ticker[symbol]
+	entry, found := ticker.BySymbol[symbol]
 	if !found {
 		return fmt.Errorf("symbol %q not found", symbol)
 	}

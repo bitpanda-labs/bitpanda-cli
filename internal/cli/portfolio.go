@@ -61,14 +61,7 @@ func (app *App) runPortfolio(cmd *cobra.Command, sortFlag string) error {
 		return nil
 	}
 
-	// Resolve all asset names in a single batch request
-	assetMap, err := app.apiClient.ListAllAssets(ctx)
-	if err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: could not fetch assets: %v\n", err)
-		assetMap = make(map[string]api.AssetData)
-	}
-
-	// Fetch ticker prices
+	// Fetch ticker — provides name, symbol, type, and price keyed by asset ID
 	ticker, err := app.apiClient.FetchAllTicker(ctx)
 	if err != nil {
 		return fmt.Errorf("fetching prices: %w", err)
@@ -82,22 +75,21 @@ func (app *App) runPortfolio(cmd *cobra.Command, sortFlag string) error {
 			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skipping wallet %s in aggregation: invalid balance %q: %v\n", w.WalletID, w.Balance, err)
 			continue
 		}
-		asset, found := assetMap[w.AssetID]
 		symbol := "unknown"
 		name := "unknown"
-		if found {
-			symbol = asset.Symbol
-			name = asset.Name
+		if te, found := ticker.ByID[w.AssetID]; found {
+			symbol = te.Symbol
+			name = te.Name
 		}
 
 		row, ok := agg[symbol]
 		if !ok {
 			price := 0.0
-			if t, found := ticker[symbol]; found {
+			if te, found := ticker.BySymbol[symbol]; found {
 				var parseErr error
-				price, parseErr = strconv.ParseFloat(t.Price, 64)
+				price, parseErr = strconv.ParseFloat(te.Price, 64)
 				if parseErr != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: invalid price %q for %s, using 0.00: %v\n", t.Price, symbol, parseErr)
+					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: invalid price %q for %s, using 0.00: %v\n", te.Price, symbol, parseErr)
 					price = 0.0
 				}
 			}

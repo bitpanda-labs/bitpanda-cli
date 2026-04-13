@@ -77,18 +77,6 @@ func assetJSON(id, name, symbol string) []byte {
 	return b
 }
 
-// assetsListHandler returns an http.HandlerFunc that serves a paginated list of assets.
-func assetsListHandler(t *testing.T, assets ...[]string) http.HandlerFunc {
-	t.Helper()
-	return func(w http.ResponseWriter, r *http.Request) {
-		data := make([]map[string]string, len(assets))
-		for i, a := range assets {
-			data[i] = map[string]string{"id": a[0], "name": a[1], "symbol": a[2]}
-		}
-		w.Write(paginatedJSON(t, data))
-	}
-}
-
 // captureStdout captures os.Stdout during fn execution and returns the output.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()

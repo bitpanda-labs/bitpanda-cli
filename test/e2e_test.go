@@ -141,8 +141,8 @@ func mockServer(t *testing.T) *httptest.Server {
 		case strings.HasPrefix(r.URL.Path, "/v1/ticker"):
 			json.NewEncoder(w).Encode(map[string]any{
 				"data": []map[string]any{
-					{"id": "t1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "95000.00", "price_change_day": "1.5"},
-					{"id": "t2", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3500.00", "price_change_day": "-0.8"},
+					{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "95000.00", "price_change_day": "1.5"},
+					{"id": "a2", "name": "Ethereum", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3500.00", "price_change_day": "-0.8"},
 				},
 				"has_next_page": false,
 				"next_cursor":   "",

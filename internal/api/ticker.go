@@ -9,6 +9,7 @@ import (
 // TickerEntry represents a single ticker item.
 type TickerEntry struct {
 	ID             string `json:"id"`
+	Name           string `json:"name"`
 	Symbol         string `json:"symbol"`
 	Type           string `json:"type"`
 	Currency       string `json:"currency"`
@@ -16,21 +17,31 @@ type TickerEntry struct {
 	PriceChangeDay string `json:"price_change_day"`
 }
 
+// Ticker holds ticker entries indexed by symbol and by asset ID.
+type Ticker struct {
+	BySymbol map[string]TickerEntry
+	ByID     map[string]TickerEntry
+}
+
 // FetchAllTicker fetches all ticker entries with auto-pagination.
-// Returns a map keyed by symbol.
-func (c *Client) FetchAllTicker(ctx context.Context) (map[string]TickerEntry, error) {
+// Returns a Ticker with maps keyed by symbol and by asset ID.
+func (c *Client) FetchAllTicker(ctx context.Context) (*Ticker, error) {
 	rawItems, err := PaginateAll(ctx, c, "/v1/ticker", url.Values{}, "cursor", 500, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make(map[string]TickerEntry, len(rawItems))
+	t := &Ticker{
+		BySymbol: make(map[string]TickerEntry, len(rawItems)),
+		ByID:     make(map[string]TickerEntry, len(rawItems)),
+	}
 	for _, raw := range rawItems {
 		var entry TickerEntry
 		if err := json.Unmarshal(raw, &entry); err != nil {
 			return nil, err
 		}
-		result[entry.Symbol] = entry
+		t.BySymbol[entry.Symbol] = entry
+		t.ByID[entry.ID] = entry
 	}
-	return result, nil
+	return t, nil
 }

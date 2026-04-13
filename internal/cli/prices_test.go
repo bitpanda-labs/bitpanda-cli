@@ -10,9 +10,9 @@ func TestRunPrices_AllFlag(t *testing.T) {
 	server := newMockServer(t, mockEndpoints{
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "-2.5"},
-				{"id": "2", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3000.00", "price_change_day": "1.2"},
-				{"id": "3", "symbol": "XAU", "type": "metal", "currency": "EUR", "price": "2000.00", "price_change_day": "0.3"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "-2.5"},
+				{"id": "a2", "name": "Ethereum", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3000.00", "price_change_day": "1.2"},
+				{"id": "a3", "name": "Gold", "symbol": "XAU", "type": "metal", "currency": "EUR", "price": "2000.00", "price_change_day": "0.3"},
 			}))
 		},
 	})
@@ -60,9 +60,9 @@ func TestRunPrices_HeldAssetsOnly(t *testing.T) {
 	server := newMockServer(t, mockEndpoints{
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "0.5"},
-				{"id": "2", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3000.00", "price_change_day": "1.2"},
-				{"id": "3", "symbol": "XAU", "type": "metal", "currency": "EUR", "price": "2000.00", "price_change_day": "0.3"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "0.5"},
+				{"id": "a2", "name": "Ethereum", "symbol": "ETH", "type": "cryptocoin", "currency": "EUR", "price": "3000.00", "price_change_day": "1.2"},
+				{"id": "a3", "name": "Gold", "symbol": "XAU", "type": "metal", "currency": "EUR", "price": "2000.00", "price_change_day": "0.3"},
 			}))
 		},
 		"/v1/wallets": func(w http.ResponseWriter, r *http.Request) {
@@ -70,9 +70,6 @@ func TestRunPrices_HeldAssetsOnly(t *testing.T) {
 				{"wallet_id": "w1", "asset_id": "a1", "wallet_type": "", "balance": "1.5"},
 				{"wallet_id": "w2", "asset_id": "a2", "wallet_type": "", "balance": "0.0"}, // zero balance, excluded
 			}))
-		},
-		"/v1/assets/a1": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(assetJSON("a1", "Bitcoin", "BTC"))
 		},
 	})
 	defer server.Close()
@@ -103,7 +100,7 @@ func TestRunPrices_NoHeldAssets(t *testing.T) {
 	server := newMockServer(t, mockEndpoints{
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "0"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "0"},
 			}))
 		},
 		"/v1/wallets": func(w http.ResponseWriter, r *http.Request) {
@@ -134,17 +131,14 @@ func TestRunPrices_InvalidBalanceSkipped(t *testing.T) {
 	server := newMockServer(t, mockEndpoints{
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "0"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "0"},
 			}))
 		},
 		"/v1/wallets": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
 				{"wallet_id": "w1", "asset_id": "a1", "wallet_type": "", "balance": "not-a-number"},
-				{"wallet_id": "w2", "asset_id": "a2", "wallet_type": "", "balance": "1.0"},
+				{"wallet_id": "w2", "asset_id": "a1", "wallet_type": "", "balance": "1.0"},
 			}))
-		},
-		"/v1/assets/a2": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(assetJSON("a2", "Bitcoin", "BTC"))
 		},
 	})
 	defer server.Close()
@@ -176,20 +170,17 @@ func TestRunPrices_InvalidBalanceSkipped(t *testing.T) {
 }
 
 func TestRunPrices_SymbolNotInTicker(t *testing.T) {
-	// Held asset whose symbol doesn't appear in ticker should be silently skipped.
+	// Held asset whose ID doesn't appear in ticker should be silently skipped.
 	server := newMockServer(t, mockEndpoints{
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "0"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "0"},
 			}))
 		},
 		"/v1/wallets": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
 				{"wallet_id": "w1", "asset_id": "a99", "wallet_type": "", "balance": "5.0"},
 			}))
-		},
-		"/v1/assets/a99": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(assetJSON("a99", "UnknownCoin", "UNK"))
 		},
 	})
 	defer server.Close()
@@ -208,7 +199,7 @@ func TestRunPrices_SymbolNotInTicker(t *testing.T) {
 
 	rows := parseJSONOutput(t, raw)
 	if len(rows) != 0 {
-		t.Fatalf("expected 0 rows (symbol not in ticker), got %d", len(rows))
+		t.Fatalf("expected 0 rows (asset not in ticker), got %d", len(rows))
 	}
 }
 
@@ -217,7 +208,7 @@ func TestRunPrices_DeduplicatesHeldSymbols(t *testing.T) {
 	server := newMockServer(t, mockEndpoints{
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "0"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "0"},
 			}))
 		},
 		"/v1/wallets": func(w http.ResponseWriter, r *http.Request) {
@@ -225,9 +216,6 @@ func TestRunPrices_DeduplicatesHeldSymbols(t *testing.T) {
 				{"wallet_id": "w1", "asset_id": "a1", "wallet_type": "", "balance": "1.0"},
 				{"wallet_id": "w2", "asset_id": "a1", "wallet_type": "STAKING", "balance": "2.0"},
 			}))
-		},
-		"/v1/assets/a1": func(w http.ResponseWriter, r *http.Request) {
-			w.Write(assetJSON("a1", "Bitcoin", "BTC"))
 		},
 	})
 	defer server.Close()
@@ -272,7 +260,7 @@ func TestRunPrices_WalletsAPIError(t *testing.T) {
 	server := newMockServer(t, mockEndpoints{
 		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
 			w.Write(paginatedJSON(t, []map[string]string{
-				{"id": "1", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "0"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00", "price_change_day": "0"},
 			}))
 		},
 		"/v1/wallets": func(w http.ResponseWriter, r *http.Request) {

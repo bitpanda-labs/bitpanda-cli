@@ -36,7 +36,7 @@ func (app *App) runPrices(cmd *cobra.Command, all bool) error {
 	var symbols []string
 
 	if all {
-		for s := range ticker {
+		for s := range ticker.BySymbol {
 			symbols = append(symbols, s)
 		}
 	} else {
@@ -46,30 +46,24 @@ func (app *App) runPrices(cmd *cobra.Command, all bool) error {
 			return err
 		}
 
-		// Collect unique asset IDs with non-zero balance
-		assetIDs := make(map[string]bool)
+		// Resolve asset IDs to symbols via ticker
+		seen := make(map[string]bool)
 		for _, w := range wallets {
 			bal, err := strconv.ParseFloat(w.Balance, 64)
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skipping wallet %s: invalid balance %q: %v\n", w.WalletID, w.Balance, err)
 				continue
 			}
-			if bal > 0 {
-				assetIDs[w.AssetID] = true
-			}
-		}
-
-		// Resolve asset IDs to symbols
-		seen := make(map[string]bool)
-		for id := range assetIDs {
-			asset, err := app.apiClient.GetAsset(ctx, id)
-			if err != nil {
+			if bal <= 0 {
 				continue
 			}
-			sym := asset.Data.Symbol
-			if !seen[sym] {
-				seen[sym] = true
-				symbols = append(symbols, sym)
+			te, found := ticker.ByID[w.AssetID]
+			if !found {
+				continue
+			}
+			if !seen[te.Symbol] {
+				seen[te.Symbol] = true
+				symbols = append(symbols, te.Symbol)
 			}
 		}
 	}
@@ -79,7 +73,7 @@ func (app *App) runPrices(cmd *cobra.Command, all bool) error {
 	columns := []string{"Symbol", "Price", "Currency", "24h Change"}
 	rows := make([][]string, 0, len(symbols))
 	for _, s := range symbols {
-		entry, found := ticker[s]
+		entry, found := ticker.BySymbol[s]
 		if !found {
 			continue
 		}
