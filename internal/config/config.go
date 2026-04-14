@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -20,12 +21,12 @@ type Config struct {
 func Load(flagAPIKey string) (*Config, error) {
 	baseURL := os.Getenv("BITPANDA_BASE_URL")
 
-	if flagAPIKey != "" {
-		return &Config{APIKey: flagAPIKey, BaseURL: baseURL}, nil
+	if key := strings.TrimSpace(flagAPIKey); key != "" {
+		return &Config{APIKey: key, BaseURL: baseURL}, nil
 	}
 
-	if envKey := os.Getenv("BITPANDA_API_KEY"); envKey != "" {
-		return &Config{APIKey: envKey, BaseURL: baseURL}, nil
+	if key := strings.TrimSpace(os.Getenv("BITPANDA_API_KEY")); key != "" {
+		return &Config{APIKey: key, BaseURL: baseURL}, nil
 	}
 
 	home, err := os.UserHomeDir()
@@ -38,7 +39,7 @@ func Load(flagAPIKey string) (*Config, error) {
 		if err := viper.ReadInConfig(); err == nil {
 			checkConfigFilePermissions(viper.ConfigFileUsed())
 
-			if key := viper.GetString("api_key"); key != "" {
+			if key := strings.TrimSpace(viper.GetString("api_key")); key != "" {
 				return &Config{APIKey: key, BaseURL: baseURL}, nil
 			}
 		}
