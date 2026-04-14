@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,13 +30,18 @@ type Client struct {
 }
 
 // NewClient creates a new API client.
-func NewClient(apiKey string) *Client {
+func NewClient(apiKey string, insecure bool) *Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if insecure {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // user-requested via --insecure flag
+	}
 	return &Client{
 		BaseURL:   DefaultBaseURL,
 		APIKey:    apiKey,
 		UserAgent: defaultUserAgent,
 		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: transport,
 		},
 	}
 }

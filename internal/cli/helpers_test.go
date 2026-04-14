@@ -42,7 +42,7 @@ func newMockServer(t *testing.T, endpoints mockEndpoints) *httptest.Server {
 
 // newTestApp creates an App with JSON output and a client pointing at the test server.
 func newTestApp(serverURL string) *App {
-	client := api.NewClient("test-key")
+	client := api.NewClient("test-key", false)
 	client.BaseURL = serverURL
 	return &App{
 		apiClient: client,

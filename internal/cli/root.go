@@ -33,6 +33,7 @@ func newApp() *cobra.Command {
 
 	var flagAPIKey string
 	var flagOutput string
+	var flagInsecure bool
 
 	rootCmd := &cobra.Command{
 		Use:   "bp",
@@ -63,7 +64,7 @@ all from your terminal. Supports table, JSON, and CSV output.`,
 				return err
 			}
 			app.cfg = c
-			app.apiClient = api.NewClient(app.cfg.APIKey)
+			app.apiClient = api.NewClient(app.cfg.APIKey, flagInsecure)
 			if app.cfg.BaseURL != "" {
 				app.apiClient.BaseURL = app.cfg.BaseURL
 			}
@@ -74,6 +75,7 @@ all from your terminal. Supports table, JSON, and CSV output.`,
 
 	rootCmd.PersistentFlags().StringVarP(&flagOutput, "output", "o", "table", "Output format: table, json, csv")
 	rootCmd.PersistentFlags().StringVar(&flagAPIKey, "api-key", "", "Bitpanda API key (overrides env and config file)")
+	rootCmd.PersistentFlags().BoolVar(&flagInsecure, "insecure", false, "Skip TLS certificate verification")
 	rootCmd.Version = Version
 	rootCmd.SetVersionTemplate("bp version {{.Version}}\n")
 

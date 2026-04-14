@@ -22,7 +22,7 @@ func TestClient_Get_SetsHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("test-key")
+	c := NewClient("test-key", false)
 	c.BaseURL = server.URL
 
 	_, err := c.Get(context.Background(), "/test", nil)
@@ -38,7 +38,7 @@ func TestClient_Get_ReturnsAPIErrorOn401(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("bad-key")
+	c := NewClient("bad-key", false)
 	c.BaseURL = server.URL
 
 	_, err := c.Get(context.Background(), "/test", nil)
@@ -65,7 +65,7 @@ func TestClient_Get_ReturnsAPIErrorOn500(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("key")
+	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
 	_, err := c.Get(context.Background(), "/test", nil)
@@ -105,7 +105,7 @@ func TestPaginateAll_MultiplePages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("key")
+	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
 	items, err := PaginateAll(context.Background(), c, "/test", nil, "after", 10, 0)
@@ -128,7 +128,7 @@ func TestPaginateAll_RespectsLimit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("key")
+	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
 	items, err := PaginateAll(context.Background(), c, "/test", nil, "after", 10, 3)
@@ -167,7 +167,7 @@ func TestPaginateAll_TickerCursorParam(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("key")
+	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
 	items, err := PaginateAll(context.Background(), c, "/v1/ticker", nil, "cursor", 500, 0)
@@ -277,7 +277,7 @@ func TestListWallets_SendsParams(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("key")
+	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
 	wallets, err := c.ListWallets(context.Background(), WalletParams{
@@ -311,7 +311,7 @@ func TestListWallets_DefaultPageSize(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("key")
+	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
 	_, err := c.ListWallets(context.Background(), WalletParams{})
@@ -346,7 +346,7 @@ func TestListTransactions_SendsParams(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("key")
+	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
 	txns, err := c.ListTransactions(context.Background(), TransactionParams{
@@ -397,7 +397,7 @@ func TestListTransactions_OmitsEmptyParams(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("key")
+	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
 	_, err := c.ListTransactions(context.Background(), TransactionParams{})
@@ -417,7 +417,7 @@ func TestGetAsset_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("key")
+	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
 	asset, err := c.GetAsset(context.Background(), "a1")
@@ -442,7 +442,7 @@ func TestGetAsset_NotFound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("key")
+	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
 	_, err := c.GetAsset(context.Background(), "nonexistent")
@@ -471,7 +471,7 @@ func TestFetchAllTicker_KeyedBySymbolAndID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("key")
+	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
 	ticker, err := c.FetchAllTicker(context.Background())
@@ -516,7 +516,7 @@ func TestListAllAssets_KeyedByID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient("key")
+	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
 	assets, err := c.ListAllAssets(context.Background())
