@@ -298,6 +298,38 @@ func TestListWallets_SendsParams(t *testing.T) {
 	}
 }
 
+func TestListWallets_DeduplicatesByWalletID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := PaginatedResponse{
+			Data: json.RawMessage(`[
+				{"wallet_id":"w1","asset_id":"a1","wallet_type":"","balance":"10.0"},
+				{"wallet_id":"w1","asset_id":"a1","wallet_type":"","balance":"10.0"},
+				{"wallet_id":"w2","asset_id":"a2","wallet_type":"","balance":"5.0"}
+			]`),
+			HasNextPage: false,
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	c := NewClient("key", false)
+	c.BaseURL = server.URL
+
+	wallets, err := c.ListWallets(context.Background(), WalletParams{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(wallets) != 2 {
+		t.Fatalf("got %d wallets, want 2 (duplicate w1 should be removed)", len(wallets))
+	}
+	if wallets[0].WalletID != "w1" {
+		t.Errorf("first wallet = %q, want %q", wallets[0].WalletID, "w1")
+	}
+	if wallets[1].WalletID != "w2" {
+		t.Errorf("second wallet = %q, want %q", wallets[1].WalletID, "w2")
+	}
+}
+
 func TestListWallets_DefaultPageSize(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("page_size"); got != "25" {

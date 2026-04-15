@@ -77,22 +77,19 @@ func (app *App) runPortfolio(cmd *cobra.Command, sortFlag string) error {
 		}
 		symbol := "unknown"
 		name := "unknown"
+		price := 0.0
 		if te, found := ticker.ByID[w.AssetID]; found {
 			symbol = te.Symbol
 			name = te.Name
+			if p, parseErr := strconv.ParseFloat(te.Price, 64); parseErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: invalid price %q for %s, using 0.00: %v\n", te.Price, symbol, parseErr)
+			} else {
+				price = p
+			}
 		}
 
 		row, ok := agg[symbol]
 		if !ok {
-			price := 0.0
-			if te, found := ticker.BySymbol[symbol]; found {
-				var parseErr error
-				price, parseErr = strconv.ParseFloat(te.Price, 64)
-				if parseErr != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: invalid price %q for %s, using 0.00: %v\n", te.Price, symbol, parseErr)
-					price = 0.0
-				}
-			}
 			row = &portfolioRow{
 				AssetName:   name,
 				AssetSymbol: symbol,
