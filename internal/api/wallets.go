@@ -40,17 +40,12 @@ func (c *Client) ListWallets(ctx context.Context, p WalletParams) ([]Wallet, err
 		return nil, err
 	}
 
-	seen := make(map[string]struct{}, len(rawItems))
 	wallets := make([]Wallet, 0, len(rawItems))
 	for _, raw := range rawItems {
 		var w Wallet
 		if err := json.Unmarshal(raw, &w); err != nil {
 			return nil, err
 		}
-		if _, dup := seen[w.WalletID]; dup {
-			continue
-		}
-		seen[w.WalletID] = struct{}{}
 		wallets = append(wallets, w)
 	}
 	return wallets, nil
