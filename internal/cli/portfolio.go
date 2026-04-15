@@ -67,7 +67,7 @@ func (app *App) runPortfolio(cmd *cobra.Command, sortFlag string) error {
 		return fmt.Errorf("fetching prices: %w", err)
 	}
 
-	// Aggregate by asset
+	// Aggregate by asset ID (not symbol, to avoid collisions between different assets sharing a symbol).
 	agg := make(map[string]*portfolioRow)
 	for _, w := range nonZero {
 		bal, err := strconv.ParseFloat(w.Balance, 64)
@@ -82,10 +82,10 @@ func (app *App) runPortfolio(cmd *cobra.Command, sortFlag string) error {
 			name = te.Name
 		}
 
-		row, ok := agg[symbol]
+		row, ok := agg[w.AssetID]
 		if !ok {
 			price := 0.0
-			if te, found := ticker.BySymbol[symbol]; found {
+			if te, found := ticker.ByIDEUR[w.AssetID]; found {
 				var parseErr error
 				price, parseErr = strconv.ParseFloat(te.Price, 64)
 				if parseErr != nil {
@@ -99,7 +99,7 @@ func (app *App) runPortfolio(cmd *cobra.Command, sortFlag string) error {
 				EURPrice:    price,
 				Wallets:     make(map[string]float64),
 			}
-			agg[symbol] = row
+			agg[w.AssetID] = row
 		}
 
 		row.Balance += bal

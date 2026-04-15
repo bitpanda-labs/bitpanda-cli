@@ -380,6 +380,49 @@ func TestRunPortfolio_WalletTypeAggregation(t *testing.T) {
 	}
 }
 
+func TestRunPortfolio_UsesEURPriceWhenMultipleCurrencies(t *testing.T) {
+	// Ticker returns the same asset with EUR, USD, and BTC prices.
+	// Portfolio must use only the EUR price.
+	server := newMockServer(t, mockEndpoints{
+		"/v1/wallets": func(w http.ResponseWriter, r *http.Request) {
+			w.Write(paginatedJSON(t, []map[string]string{
+				{"wallet_id": "w1", "asset_id": "a1", "wallet_type": "", "balance": "1.0"},
+			}))
+		},
+		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
+			w.Write(paginatedJSON(t, []map[string]string{
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "USD", "price": "99999.00"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "EUR", "price": "50000.00"},
+				{"id": "a1", "name": "Bitcoin", "symbol": "BTC", "type": "cryptocoin", "currency": "BTC", "price": "1.00"},
+			}))
+		},
+	})
+	defer server.Close()
+
+	app := newTestApp(server.URL)
+	cmd := newTestCmd()
+
+	var raw string
+	var runErr error
+	raw = captureStdout(t, func() {
+		runErr = app.runPortfolio(cmd, "name")
+	})
+	if runErr != nil {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+
+	rows := parseJSONOutput(t, raw)
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (BTC + TOTAL), got %d", len(rows))
+	}
+	if rows[0]["EUR Price"] != "50000.00" {
+		t.Errorf("expected EUR price 50000.00, got %s (wrong currency used)", rows[0]["EUR Price"])
+	}
+	if rows[0]["EUR Value"] != "50000.00" {
+		t.Errorf("expected EUR value 50000.00, got %s", rows[0]["EUR Value"])
+	}
+}
+
 func TestFormatFloat(t *testing.T) {
 	tests := []struct {
 		input float64
