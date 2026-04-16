@@ -21,7 +21,6 @@ type TickerEntry struct {
 type Ticker struct {
 	BySymbol map[string]TickerEntry
 	ByID     map[string]TickerEntry
-	ByIDEUR  map[string]TickerEntry // only EUR-priced entries, keyed by asset ID
 }
 
 // FetchAllTicker fetches all ticker entries with auto-pagination.
@@ -35,20 +34,14 @@ func (c *Client) FetchAllTicker(ctx context.Context) (*Ticker, error) {
 	t := &Ticker{
 		BySymbol: make(map[string]TickerEntry, len(rawItems)),
 		ByID:     make(map[string]TickerEntry, len(rawItems)),
-		ByIDEUR:  make(map[string]TickerEntry, len(rawItems)),
 	}
 	for _, raw := range rawItems {
 		var entry TickerEntry
 		if err := json.Unmarshal(raw, &entry); err != nil {
 			return nil, err
 		}
-		// Always index by ID (used for name/symbol lookup; currency doesn't matter there).
+		t.BySymbol[entry.Symbol] = entry
 		t.ByID[entry.ID] = entry
-		// Only index EUR prices by symbol and by ID, so price lookups return the EUR value.
-		if entry.Currency == "EUR" {
-			t.BySymbol[entry.Symbol] = entry
-			t.ByIDEUR[entry.ID] = entry
-		}
 	}
 	return t, nil
 }
