@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"strconv"
 )
@@ -54,10 +55,11 @@ func (p *PaginatedResponse) GetNextCursor() string {
 
 // PaginateAll fetches all pages from a paginated endpoint.
 // cursorParam is the query parameter name for the cursor ("after" for wallets/transactions, "cursor" for ticker).
-// limit of 0 means no limit.
-func PaginateAll(ctx context.Context, c *Client, path string, baseParams url.Values, cursorParam string, pageSize int, limit int) ([]json.RawMessage, error) {
+// limit of 0 means no limit. progress receives a dot per page if non-nil.
+func PaginateAll(ctx context.Context, c *Client, path string, baseParams url.Values, cursorParam string, pageSize int, limit int, progress io.Writer) ([]json.RawMessage, error) {
 	var allItems []json.RawMessage
 	cursor := ""
+	pagesWritten := 0
 
 	for {
 		params := url.Values{}
@@ -73,11 +75,22 @@ func PaginateAll(ctx context.Context, c *Client, path string, baseParams url.Val
 
 		var resp PaginatedResponse
 		if err := c.GetJSON(ctx, path, params, &resp); err != nil {
+			if pagesWritten > 0 && progress != nil {
+				fmt.Fprintln(progress)
+			}
 			return nil, err
+		}
+
+		if progress != nil {
+			fmt.Fprint(progress, ".")
+			pagesWritten++
 		}
 
 		var items []json.RawMessage
 		if err := json.Unmarshal(resp.Data, &items); err != nil {
+			if pagesWritten > 0 && progress != nil {
+				fmt.Fprintln(progress)
+			}
 			return nil, err
 		}
 
@@ -96,6 +109,10 @@ func PaginateAll(ctx context.Context, c *Client, path string, baseParams url.Val
 		if cursor == "" {
 			break
 		}
+	}
+
+	if pagesWritten > 0 && progress != nil {
+		fmt.Fprintln(progress)
 	}
 
 	return allItems, nil

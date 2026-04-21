@@ -1,9 +1,13 @@
 package cli
 
 import (
-	"github.com/spf13/cobra"
+	"io"
+	"os"
+
 	"github.com/bitpanda-labs/bitpanda-cli/internal/api"
 	"github.com/bitpanda-labs/bitpanda-cli/internal/output"
+	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func (app *App) registerTransactions(parent *cobra.Command) {
@@ -43,6 +47,13 @@ func (app *App) runTransactions(cmd *cobra.Command, walletID, flow, assetID, fro
 		fetchLimit = pageSize
 	}
 
+	var progress io.Writer
+	if all {
+		if f, ok := cmd.ErrOrStderr().(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+			progress = f
+		}
+	}
+
 	txns, err := app.apiClient.ListTransactions(cmd.Context(), api.TransactionParams{
 		WalletID: walletID,
 		Flow:     flow,
@@ -51,6 +62,7 @@ func (app *App) runTransactions(cmd *cobra.Command, walletID, flow, assetID, fro
 		To:       to,
 		PageSize: pageSize,
 		Limit:    fetchLimit,
+		Progress: progress,
 	})
 	if err != nil {
 		return err

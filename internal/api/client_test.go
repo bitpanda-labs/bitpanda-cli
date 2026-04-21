@@ -108,7 +108,7 @@ func TestPaginateAll_MultiplePages(t *testing.T) {
 	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
-	items, err := PaginateAll(context.Background(), c, "/test", nil, "after", 10, 0)
+	items, err := PaginateAll(context.Background(), c, "/test", nil, "after", 10, 0, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestPaginateAll_RespectsLimit(t *testing.T) {
 	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
-	items, err := PaginateAll(context.Background(), c, "/test", nil, "after", 10, 3)
+	items, err := PaginateAll(context.Background(), c, "/test", nil, "after", 10, 3, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestPaginateAll_TickerCursorParam(t *testing.T) {
 	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
-	items, err := PaginateAll(context.Background(), c, "/v1/ticker", nil, "cursor", 500, 0)
+	items, err := PaginateAll(context.Background(), c, "/v1/ticker", nil, "cursor", 500, 0, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

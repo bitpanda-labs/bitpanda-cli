@@ -26,7 +26,7 @@ type Ticker struct {
 // FetchAllTicker fetches all ticker entries with auto-pagination.
 // Returns a Ticker with maps keyed by symbol and by asset ID.
 func (c *Client) FetchAllTicker(ctx context.Context) (*Ticker, error) {
-	rawItems, err := PaginateAll(ctx, c, "/v1/ticker", url.Values{}, "cursor", 500, 0)
+	rawItems, err := PaginateAll(ctx, c, "/v1/ticker", url.Values{}, "cursor", 500, 0, nil)
 	if err != nil {
 		return nil, err
 	}
