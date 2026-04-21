@@ -35,7 +35,7 @@ func (c *Client) ListWallets(ctx context.Context, p WalletParams) ([]Wallet, err
 		pageSize = 25
 	}
 
-	rawItems, err := PaginateAll(ctx, c, "/v1/wallets/", params, "after", pageSize, p.Limit)
+	rawItems, err := PaginateAll(ctx, c, "/v1/wallets/", params, "after", pageSize, p.Limit, nil)
 	if err != nil {
 		return nil, err
 	}

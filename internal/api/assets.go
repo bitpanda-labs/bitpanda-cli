@@ -29,7 +29,7 @@ func (c *Client) GetAsset(ctx context.Context, assetID string) (*Asset, error) {
 
 // ListAllAssets fetches all assets via pagination and returns a map keyed by asset ID.
 func (c *Client) ListAllAssets(ctx context.Context) (map[string]AssetData, error) {
-	rawItems, err := PaginateAll(ctx, c, "/v1/assets", url.Values{}, "after", 100, 0)
+	rawItems, err := PaginateAll(ctx, c, "/v1/assets", url.Values{}, "after", 100, 0, nil)
 	if err != nil {
 		return nil, err
 	}

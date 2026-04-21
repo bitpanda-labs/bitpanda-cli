@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/url"
 )
 
@@ -32,6 +33,7 @@ type TransactionParams struct {
 	To       string
 	PageSize int
 	Limit    int
+	Progress io.Writer
 }
 
 // ListTransactions fetches transactions with optional filtering.
@@ -58,7 +60,7 @@ func (c *Client) ListTransactions(ctx context.Context, p TransactionParams) ([]T
 		pageSize = 25
 	}
 
-	rawItems, err := PaginateAll(ctx, c, "/v1/transactions", params, "after", pageSize, p.Limit)
+	rawItems, err := PaginateAll(ctx, c, "/v1/transactions", params, "after", pageSize, p.Limit, p.Progress)
 	if err != nil {
 		return nil, err
 	}
