@@ -447,3 +447,37 @@ func TestRunPortfolio_InvalidTickerPrice(t *testing.T) {
 		t.Errorf("expected warning about invalid price, got: %s", stderrBuf.String())
 	}
 }
+
+func TestRunPortfolio_DistinctAssetsWithoutTickerNotMerged(t *testing.T) {
+	server := newMockServer(t, mockEndpoints{
+		"/v1/wallets": func(w http.ResponseWriter, r *http.Request) {
+			w.Write(paginatedJSON(t, []map[string]string{
+				{"wallet_id": "w1", "asset_id": "a1", "wallet_type": "", "balance": "1.0"},
+				{"wallet_id": "w2", "asset_id": "a2", "wallet_type": "", "balance": "2.0"},
+			}))
+		},
+		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
+			w.Write(paginatedJSON(t, []map[string]string{
+				{"id": "zzz", "name": "Other", "symbol": "ZZZ", "type": "cryptocoin", "currency": "EUR", "price": "1.00"},
+			}))
+		},
+	})
+	defer server.Close()
+
+	app := newTestApp(server.URL)
+	cmd := newTestCmd()
+
+	var raw string
+	var runErr error
+	raw = captureStdout(t, func() {
+		runErr = app.runPortfolio(cmd, "name")
+	})
+	if runErr != nil {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+
+	rows := parseJSONOutput(t, raw)
+	if len(rows) != 3 {
+		t.Fatalf("expected 3 rows (2 distinct assets + TOTAL), got %d", len(rows))
+	}
+}
