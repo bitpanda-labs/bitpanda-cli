@@ -106,9 +106,11 @@ func (app *App) runTrades(cmd *cobra.Command, operation, assetType, from, to str
 			name = te.Name
 			symbol = te.Symbol
 			aType = te.Type
-			eurPrice = te.Price
 		} else {
 			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: asset %s not found in ticker\n", t.AssetID)
+		}
+		if te, found := ticker.ByIDEUR[t.AssetID]; found {
+			eurPrice = te.Price
 		}
 
 		if assetType != "" && aType != assetType {

@@ -398,3 +398,39 @@ func TestRunTrades_UnknownAssetShowsUnknown(t *testing.T) {
 		t.Errorf("expected EUR price 'N/A', got %s", rows[0]["EUR Price"])
 	}
 }
+
+func TestRunTrades_NonEURPriceNotLabeledEUR(t *testing.T) {
+	server := newMockServer(t, mockEndpoints{
+		"/v1/transactions": func(w http.ResponseWriter, r *http.Request) {
+			w.Write(paginatedJSON(t, []map[string]interface{}{
+				{"transaction_id": "tx1", "asset_id": "a1", "trade_id": "t1", "flow": "incoming", "operation_type": "buy", "asset_amount": "1.0", "credited_at": "2024-01-01"},
+			}))
+		},
+		"/v1/ticker": func(w http.ResponseWriter, r *http.Request) {
+			w.Write(paginatedJSON(t, []map[string]string{
+				{"id": "a1", "name": "Apple", "symbol": "AAPL", "type": "stock", "currency": "USD", "price": "190.00"},
+			}))
+		},
+	})
+	defer server.Close()
+
+	app := newTestApp(server.URL)
+	cmd := newTestCmd()
+
+	var raw string
+	var runErr error
+	raw = captureStdout(t, func() {
+		runErr = app.runTrades(cmd, "", "", "", "", 0, false)
+	})
+	if runErr != nil {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+
+	rows := parseJSONOutput(t, raw)
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0]["EUR Price"] != "N/A" {
+		t.Errorf("expected EUR price 'N/A' for USD-quoted asset, got %s", rows[0]["EUR Price"])
+	}
+}
