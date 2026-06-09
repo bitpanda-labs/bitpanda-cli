@@ -21,6 +21,7 @@ type TickerEntry struct {
 type Ticker struct {
 	BySymbol map[string]TickerEntry
 	ByID     map[string]TickerEntry
+	ByIDEUR  map[string]TickerEntry
 }
 
 // FetchAllTicker fetches all ticker entries with auto-pagination.
@@ -34,6 +35,7 @@ func (c *Client) FetchAllTicker(ctx context.Context) (*Ticker, error) {
 	t := &Ticker{
 		BySymbol: make(map[string]TickerEntry, len(rawItems)),
 		ByID:     make(map[string]TickerEntry, len(rawItems)),
+		ByIDEUR:  make(map[string]TickerEntry, len(rawItems)),
 	}
 	for _, raw := range rawItems {
 		var entry TickerEntry
@@ -42,6 +44,9 @@ func (c *Client) FetchAllTicker(ctx context.Context) (*Ticker, error) {
 		}
 		t.BySymbol[entry.Symbol] = entry
 		t.ByID[entry.ID] = entry
+		if entry.Currency == "" || entry.Currency == "EUR" {
+			t.ByIDEUR[entry.ID] = entry
+		}
 	}
 	return t, nil
 }
