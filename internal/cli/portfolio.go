@@ -88,7 +88,7 @@ func (app *App) runPortfolio(cmd *cobra.Command, sortFlag string) error {
 			}
 		}
 
-		row, ok := agg[symbol]
+		row, ok := agg[w.AssetID]
 		if !ok {
 			row = &portfolioRow{
 				AssetName:   name,
@@ -96,7 +96,7 @@ func (app *App) runPortfolio(cmd *cobra.Command, sortFlag string) error {
 				EURPrice:    price,
 				Wallets:     make(map[string]float64),
 			}
-			agg[symbol] = row
+			agg[w.AssetID] = row
 		}
 
 		row.Balance += bal
