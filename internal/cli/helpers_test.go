@@ -8,9 +8,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/bitpanda-labs/bitpanda-cli/internal/api"
 	"github.com/bitpanda-labs/bitpanda-cli/internal/output"
+	"github.com/spf13/cobra"
 )
 
 // mockEndpoints maps URL path prefixes to handler functions.
@@ -60,7 +60,7 @@ func paginatedJSON(t *testing.T, data interface{}) []byte {
 	resp := map[string]interface{}{
 		"data":          json.RawMessage(dataBytes),
 		"has_next_page": false,
-		"end_cursor":    "",
+		"next_cursor":   "",
 	}
 	b, err := json.Marshal(resp)
 	if err != nil {
@@ -69,11 +69,14 @@ func paginatedJSON(t *testing.T, data interface{}) []byte {
 	return b
 }
 
-// assetJSON returns a JSON response for a single asset.
-func assetJSON(id, name, symbol string) []byte {
-	b, _ := json.Marshal(map[string]interface{}{
-		"data": map[string]string{"id": id, "name": name, "symbol": symbol},
-	})
+// listJSON wraps data in the non-paginated {"data": [...]} envelope used by
+// portfolio, currencies, and ticker responses.
+func listJSON(t *testing.T, data interface{}) []byte {
+	t.Helper()
+	b, err := json.Marshal(map[string]interface{}{"data": data})
+	if err != nil {
+		t.Fatalf("marshaling response: %v", err)
+	}
 	return b
 }
 
@@ -115,8 +118,3 @@ func newTestCmd() *cobra.Command {
 	cmd.SetContext(context.Background())
 	return cmd
 }
-
-// nopWriter discards all writes.
-type nopWriter struct{}
-
-func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }

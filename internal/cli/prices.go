@@ -3,86 +3,64 @@ package cli
 import (
 	"fmt"
 	"sort"
-	"strconv"
 
-	"github.com/spf13/cobra"
 	"github.com/bitpanda-labs/bitpanda-cli/internal/api"
 	"github.com/bitpanda-labs/bitpanda-cli/internal/output"
+	"github.com/spf13/cobra"
 )
 
 func (app *App) registerPrices(parent *cobra.Command) {
-	var all bool
-
 	cmd := &cobra.Command{
 		Use:   "prices",
-		Short: "List prices for held assets (or --all for all available)",
+		Short: "List prices for held assets",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return app.runPrices(cmd, all)
+			return app.runPrices(cmd)
 		},
 	}
 
-	cmd.Flags().BoolVar(&all, "all", false, "Show all available prices")
 	parent.AddCommand(cmd)
 }
 
-func (app *App) runPrices(cmd *cobra.Command, all bool) error {
+func (app *App) runPrices(cmd *cobra.Command) error {
 	ctx := cmd.Context()
 
-	ticker, err := app.apiClient.FetchAllTicker(ctx)
+	positions, err := app.apiClient.GetPortfolio(ctx, api.PortfolioParams{})
 	if err != nil {
 		return err
 	}
 
-	var symbols []string
-
-	if all {
-		for s := range ticker.BySymbol {
-			symbols = append(symbols, s)
-		}
-	} else {
-		// Get held assets
-		wallets, err := app.apiClient.ListWallets(ctx, api.WalletParams{PageSize: 100})
-		if err != nil {
-			return err
-		}
-
-		// Resolve asset IDs to symbols via ticker
-		seen := make(map[string]bool)
-		for _, w := range wallets {
-			bal, err := strconv.ParseFloat(w.Balance, 64)
-			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skipping wallet %s: invalid balance %q: %v\n", w.WalletID, w.Balance, err)
-				continue
-			}
-			if bal <= 0 {
-				continue
-			}
-			te, found := ticker.ByID[w.AssetID]
-			if !found {
-				continue
-			}
-			if !seen[te.Symbol] {
-				seen[te.Symbol] = true
-				symbols = append(symbols, te.Symbol)
-			}
-		}
+	assets, err := app.apiClient.ListAllAssets(ctx)
+	if err != nil {
+		return fmt.Errorf("fetching assets: %w", err)
 	}
 
-	sort.Strings(symbols)
-
-	columns := []string{"Symbol", "Price", "Currency", "24h Change"}
-	rows := make([][]string, 0, len(symbols))
-	for _, s := range symbols {
-		entry, found := ticker.BySymbol[s]
-		if !found {
+	// Collect unique non-fiat asset IDs held in the portfolio.
+	seen := make(map[string]bool)
+	var assetIDs []string
+	for _, p := range positions {
+		if p.AssetID == "" || seen[p.AssetID] {
 			continue
 		}
-		rows = append(rows, []string{
-			entry.Symbol,
-			entry.Price,
-			entry.Currency,
-			entry.PriceChangeDay + "%",
-		})
+		seen[p.AssetID] = true
+		assetIDs = append(assetIDs, p.AssetID)
+	}
+	sort.Slice(assetIDs, func(i, j int) bool {
+		return assets[assetIDs[i]].Symbol < assets[assetIDs[j]].Symbol
+	})
+
+	columns := []string{"Symbol", "Asset ID", "Price", "Currency ID"}
+	rows := make([][]string, 0, len(assetIDs))
+	for _, id := range assetIDs {
+		ticker, err := app.apiClient.GetTicker(ctx, id)
+		if err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: no ticker for asset %s: %v\n", id, err)
+			continue
+		}
+		symbol := id
+		if a, ok := assets[id]; ok {
+			symbol = a.Symbol
+		}
+		rows = append(rows, []string{symbol, ticker.AssetID, ticker.Price, ticker.CurrencyID})
 	}
 
 	return output.Render(app.outFormat, columns, rows)

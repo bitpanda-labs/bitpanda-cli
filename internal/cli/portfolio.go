@@ -5,148 +5,119 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/spf13/cobra"
 	"github.com/bitpanda-labs/bitpanda-cli/internal/api"
 	"github.com/bitpanda-labs/bitpanda-cli/internal/output"
+	"github.com/spf13/cobra"
 )
 
-type portfolioRow struct {
-	AssetName   string
-	AssetSymbol string
-	Balance     float64
-	EURPrice    float64
-	EURValue    float64
-	Wallets     map[string]float64 // wallet_type -> balance
-}
-
 func (app *App) registerPortfolio(parent *cobra.Command) {
-	var sortFlag string
+	var (
+		sortFlag             string
+		assetID              string
+		currencyID           string
+		equivalentCurrencyID string
+	)
 
 	cmd := &cobra.Command{
 		Use:   "portfolio",
-		Short: "Show aggregated portfolio with EUR valuations",
+		Short: "Show portfolio holdings with valuations and returns",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return app.runPortfolio(cmd, sortFlag)
+			return app.runPortfolio(cmd, sortFlag, assetID, currencyID, equivalentCurrencyID)
 		},
 	}
 
-	cmd.Flags().StringVar(&sortFlag, "sort", "name", "Sort by: name, value")
+	cmd.Flags().StringVar(&sortFlag, "sort", "value", "Sort by: name, value")
+	cmd.Flags().StringVar(&assetID, "asset-id", "", "Filter by asset UUID")
+	cmd.Flags().StringVar(&currencyID, "currency-id", "", "Filter by currency UUID")
+	cmd.Flags().StringVar(&equivalentCurrencyID, "equivalent-currency-id", "", "Currency UUID for valuations")
 	parent.AddCommand(cmd)
 }
 
-func (app *App) runPortfolio(cmd *cobra.Command, sortFlag string) error {
+func (app *App) runPortfolio(cmd *cobra.Command, sortFlag, assetID, currencyID, equivalentCurrencyID string) error {
 	ctx := cmd.Context()
 
-	// Fetch all non-zero wallets
-	wallets, err := app.apiClient.ListWallets(ctx, api.WalletParams{PageSize: 100})
+	positions, err := app.apiClient.GetPortfolio(ctx, api.PortfolioParams{
+		EquivalentCurrencyID: equivalentCurrencyID,
+		CurrencyID:           currencyID,
+		AssetID:              assetID,
+	})
 	if err != nil {
 		return err
 	}
 
-	// Filter zero balances
-	var nonZero []api.Wallet
-	for _, w := range wallets {
-		bal, err := strconv.ParseFloat(w.Balance, 64)
-		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skipping wallet %s: invalid balance %q: %v\n", w.WalletID, w.Balance, err)
-			continue
-		}
-		if bal > 0 {
-			nonZero = append(nonZero, w)
-		}
-	}
-
-	if len(nonZero) == 0 {
-		fmt.Fprintln(cmd.ErrOrStderr(), "No assets with balance found.")
+	if len(positions) == 0 {
+		fmt.Fprintln(cmd.ErrOrStderr(), "No portfolio positions found.")
 		return nil
 	}
 
-	// Fetch ticker — provides name, symbol, type, and price keyed by asset ID
-	ticker, err := app.apiClient.FetchAllTicker(ctx)
+	// Enrich with symbols/names from assets and currencies.
+	assets, err := app.apiClient.ListAllAssets(ctx)
 	if err != nil {
-		return fmt.Errorf("fetching prices: %w", err)
+		return fmt.Errorf("fetching assets: %w", err)
+	}
+	currencyList, err := app.apiClient.ListCurrencies(ctx, "")
+	if err != nil {
+		return fmt.Errorf("fetching currencies: %w", err)
+	}
+	currencies := make(map[string]api.Currency, len(currencyList))
+	for _, c := range currencyList {
+		currencies[c.ID] = c
 	}
 
-	// Aggregate by asset
-	agg := make(map[string]*portfolioRow)
-	for _, w := range nonZero {
-		bal, err := strconv.ParseFloat(w.Balance, 64)
-		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: skipping wallet %s in aggregation: invalid balance %q: %v\n", w.WalletID, w.Balance, err)
-			continue
-		}
-		symbol := "unknown"
-		name := "unknown"
-		price := 0.0
-		if te, found := ticker.ByID[w.AssetID]; found {
-			symbol = te.Symbol
-			name = te.Name
-			if p, parseErr := strconv.ParseFloat(te.Price, 64); parseErr != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: invalid price %q for %s, using 0.00: %v\n", te.Price, symbol, parseErr)
-			} else {
-				price = p
-			}
-		}
-
-		row, ok := agg[symbol]
-		if !ok {
-			row = &portfolioRow{
-				AssetName:   name,
-				AssetSymbol: symbol,
-				EURPrice:    price,
-				Wallets:     make(map[string]float64),
-			}
-			agg[symbol] = row
-		}
-
-		row.Balance += bal
-		row.EURValue = row.Balance * row.EURPrice
-
-		wType := w.WalletType
-		if wType == "" {
-			wType = "regular"
-		}
-		row.Wallets[wType] += bal
+	type row struct {
+		symbol    string
+		name      string
+		balance   string
+		available string
+		value     string
+		valueNum  float64
+		invested  string
+		ret       string
+		retPct    string
 	}
 
-	// Sort
-	rows := make([]*portfolioRow, 0, len(agg))
-	for _, r := range agg {
-		rows = append(rows, r)
+	rows := make([]row, 0, len(positions))
+	var total float64
+	for _, p := range positions {
+		symbol, name := assetLabel(p.AssetID, p.CurrencyID, assets, currencies)
+		value := moneyValue(p.CurrencyBalance)
+		// Fiat positions have no separate currency balance; use the balance itself.
+		if value == "" {
+			value = moneyValue(p.Balance)
+		}
+		valueNum, _ := strconv.ParseFloat(value, 64)
+		total += valueNum
+
+		rows = append(rows, row{
+			symbol:    symbol,
+			name:      name,
+			balance:   moneyValue(p.Balance),
+			available: moneyValue(p.AvailableBalance),
+			value:     value,
+			valueNum:  valueNum,
+			invested:  moneyValue(p.InvestedAmount),
+			ret:       moneyValue(p.TotalReturn),
+			retPct:    p.TotalReturnPercent,
+		})
 	}
 
 	switch sortFlag {
-	case "value":
-		sort.Slice(rows, func(i, j int) bool {
-			return rows[i].EURValue > rows[j].EURValue
-		})
-	default:
-		sort.Slice(rows, func(i, j int) bool {
-			return rows[i].AssetName < rows[j].AssetName
-		})
+	case "name":
+		sort.Slice(rows, func(i, j int) bool { return rows[i].name < rows[j].name })
+	default: // value
+		sort.Slice(rows, func(i, j int) bool { return rows[i].valueNum > rows[j].valueNum })
 	}
 
-	// Build output
-	columns := []string{"Asset", "Symbol", "Balance", "EUR Price", "EUR Value"}
+	// "Available" is the balance free to trade; "Balance" includes staked or
+	// otherwise locked funds, which cannot be traded.
+	columns := []string{"Asset", "Name", "Balance", "Available", "Value", "Invested", "Return", "Return %"}
 	tableRows := make([][]string, 0, len(rows)+1)
-	totalEUR := 0.0
 	for _, r := range rows {
 		tableRows = append(tableRows, []string{
-			r.AssetName,
-			r.AssetSymbol,
-			formatFloat(r.Balance),
-			formatFloat(r.EURPrice),
-			formatFloat(r.EURValue),
+			r.symbol, r.name, r.balance, r.available, r.value, r.invested, r.ret, r.retPct,
 		})
-		totalEUR += r.EURValue
 	}
-
-	// Add total row
-	tableRows = append(tableRows, []string{"TOTAL", "", "", "", formatFloat(totalEUR)})
+	tableRows = append(tableRows, []string{"TOTAL", "", "", "", strconv.FormatFloat(total, 'f', 2, 64), "", "", ""})
 
 	return output.Render(app.outFormat, columns, tableRows)
-}
-
-func formatFloat(f float64) string {
-	return strconv.FormatFloat(f, 'f', 2, 64)
 }

@@ -31,6 +31,39 @@ func TestClient_Get_SetsHeaders(t *testing.T) {
 	}
 }
 
+func TestClient_PostJSON_SendsBodyAndHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("Content-Type = %q, want application/json", got)
+		}
+		var body map[string]string
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["foo"] != "bar" {
+			t.Errorf("body foo = %q, want bar", body["foo"])
+		}
+		w.Write([]byte(`{"data":{"status":"OK"}}`))
+	}))
+	defer server.Close()
+
+	c := NewClient("key", false)
+	c.BaseURL = server.URL
+
+	var resp struct {
+		Data struct {
+			Status string `json:"status"`
+		} `json:"data"`
+	}
+	if err := c.PostJSON(context.Background(), "/test", map[string]string{"foo": "bar"}, &resp); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Data.Status != "OK" {
+		t.Errorf("status = %q, want OK", resp.Data.Status)
+	}
+}
+
 func TestClient_Get_ReturnsAPIErrorOn401(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(401)
@@ -86,18 +119,22 @@ func TestPaginateAll_MultiplePages(t *testing.T) {
 	page := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page++
+		cursor := r.URL.Query().Get("cursor")
+		if page == 2 && cursor != "cursor-1" {
+			t.Errorf("page 2: cursor = %q, want %q", cursor, "cursor-1")
+		}
 		var resp PaginatedResponse
 		switch page {
 		case 1:
 			resp = PaginatedResponse{
 				Data:        json.RawMessage(`[{"id":"1"},{"id":"2"}]`),
-				EndCursor:   "cursor-1",
+				NextCursor:  "cursor-1",
 				HasNextPage: true,
 			}
 		case 2:
 			resp = PaginatedResponse{
 				Data:        json.RawMessage(`[{"id":"3"}]`),
-				EndCursor:   "",
+				NextCursor:  "",
 				HasNextPage: false,
 			}
 		}
@@ -108,7 +145,7 @@ func TestPaginateAll_MultiplePages(t *testing.T) {
 	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
-	items, err := PaginateAll(context.Background(), c, "/test", nil, "after", 10, 0, nil)
+	items, err := PaginateAll(context.Background(), c, "/test", nil, 10, 0, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -122,7 +159,7 @@ func TestPaginateAll_RespectsLimit(t *testing.T) {
 		resp := PaginatedResponse{
 			Data:        json.RawMessage(`[{"id":"1"},{"id":"2"},{"id":"3"},{"id":"4"},{"id":"5"}]`),
 			HasNextPage: true,
-			EndCursor:   "cursor",
+			NextCursor:  "cursor",
 		}
 		json.NewEncoder(w).Encode(resp)
 	}))
@@ -131,7 +168,7 @@ func TestPaginateAll_RespectsLimit(t *testing.T) {
 	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
-	items, err := PaginateAll(context.Background(), c, "/test", nil, "after", 10, 3, nil)
+	items, err := PaginateAll(context.Background(), c, "/test", nil, 10, 3, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -140,62 +177,30 @@ func TestPaginateAll_RespectsLimit(t *testing.T) {
 	}
 }
 
-func TestPaginateAll_TickerCursorParam(t *testing.T) {
-	page := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		page++
-		cursor := r.URL.Query().Get("cursor")
-		if page == 2 && cursor != "next-1" {
-			t.Errorf("page 2: cursor = %q, want %q", cursor, "next-1")
-		}
-
-		var resp PaginatedResponse
-		switch page {
-		case 1:
-			resp = PaginatedResponse{
-				Data:        json.RawMessage(`[{"symbol":"BTC"}]`),
-				NextCursor:  "next-1",
-				HasNextPage: true,
-			}
-		case 2:
-			resp = PaginatedResponse{
-				Data:        json.RawMessage(`[{"symbol":"ETH"}]`),
-				HasNextPage: false,
-			}
-		}
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	c := NewClient("key", false)
-	c.BaseURL = server.URL
-
-	items, err := PaginateAll(context.Background(), c, "/v1/ticker", nil, "cursor", 500, 0, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(items) != 2 {
-		t.Errorf("got %d items, want 2", len(items))
-	}
-}
-
 func TestSanitizeBody_PlainText(t *testing.T) {
-	got := sanitizeBody("Internal Server Error")
+	got := sanitizeBody([]byte("Internal Server Error"))
 	if got != "Internal Server Error" {
 		t.Errorf("sanitizeBody = %q, want %q", got, "Internal Server Error")
 	}
 }
 
 func TestSanitizeBody_StripsHTML(t *testing.T) {
-	got := sanitizeBody("<html><body><h1>Error</h1><p>Something went wrong</p></body></html>")
+	got := sanitizeBody([]byte("<html><body><h1>Error</h1><p>Something went wrong</p></body></html>"))
 	if got != "ErrorSomething went wrong" {
 		t.Errorf("sanitizeBody = %q, want %q", got, "ErrorSomething went wrong")
 	}
 }
 
+func TestSanitizeBody_ExtractsErrorCode(t *testing.T) {
+	got := sanitizeBody([]byte(`{"error":{"code":"insufficient_funds"}}`))
+	if got != "insufficient_funds" {
+		t.Errorf("sanitizeBody = %q, want %q", got, "insufficient_funds")
+	}
+}
+
 func TestSanitizeBody_Truncates(t *testing.T) {
 	long := strings.Repeat("x", 300)
-	got := sanitizeBody(long)
+	got := sanitizeBody([]byte(long))
 	if len(got) != 203 { // 200 + "..."
 		t.Errorf("sanitizeBody length = %d, want 203", len(got))
 	}
@@ -204,73 +209,36 @@ func TestSanitizeBody_Truncates(t *testing.T) {
 	}
 }
 
-func TestFlexInt_UnmarshalJSON(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		want    int
-		wantErr bool
-	}{
-		{"number", `42`, 42, false},
-		{"string number", `"25"`, 25, false},
-		{"zero", `0`, 0, false},
-		{"negative number", `-5`, -5, false},
-		{"string negative", `"-5"`, -5, false},
-		{"invalid string", `"abc"`, 0, true},
-		{"boolean", `true`, 0, true},
-		{"null", `null`, 0, false}, // json.Unmarshal accepts null for int (sets to zero value)
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var fi FlexInt
-			err := fi.UnmarshalJSON([]byte(tt.input))
-			if (err != nil) != tt.wantErr {
-				t.Errorf("UnmarshalJSON(%s) error = %v, wantErr %v", tt.input, err, tt.wantErr)
-				return
-			}
-			if !tt.wantErr && int(fi) != tt.want {
-				t.Errorf("UnmarshalJSON(%s) = %d, want %d", tt.input, int(fi), tt.want)
-			}
-		})
-	}
-}
-
 func TestGetNextCursor(t *testing.T) {
 	tests := []struct {
 		name       string
 		nextCursor string
-		endCursor  string
 		want       string
 	}{
-		{"next_cursor preferred", "next-1", "end-1", "next-1"},
-		{"end_cursor fallback", "", "end-1", "end-1"},
-		{"both empty", "", "", ""},
+		{"has next", "next-1", "next-1"},
+		{"empty", "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &PaginatedResponse{
-				NextCursor: tt.nextCursor,
-				EndCursor:  tt.endCursor,
-			}
-			got := p.GetNextCursor()
-			if got != tt.want {
+			p := &PaginatedResponse{NextCursor: tt.nextCursor}
+			if got := p.GetNextCursor(); got != tt.want {
 				t.Errorf("GetNextCursor() = %q, want %q", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestListWallets_SendsParams(t *testing.T) {
+func TestListAssets_SendsParams(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if got := q.Get("asset_id"); got != "asset-123" {
-			t.Errorf("asset_id = %q, want %q", got, "asset-123")
+		if got := q.Get("symbol"); got != "BTC" {
+			t.Errorf("symbol = %q, want BTC", got)
 		}
 		if got := q.Get("page_size"); got != "50" {
-			t.Errorf("page_size = %q, want %q", got, "50")
+			t.Errorf("page_size = %q, want 50", got)
 		}
 		resp := PaginatedResponse{
-			Data:        json.RawMessage(`[{"wallet_id":"w1","asset_id":"asset-123","wallet_type":"","balance":"10.0","last_credited_at":"2024-01-01"}]`),
+			Data:        json.RawMessage(`[{"id":"a1","name":"Bitcoin","symbol":"BTC","type":"cryptocoin"}]`),
 			HasNextPage: false,
 		}
 		json.NewEncoder(w).Encode(resp)
@@ -280,140 +248,23 @@ func TestListWallets_SendsParams(t *testing.T) {
 	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
-	wallets, err := c.ListWallets(context.Background(), WalletParams{
-		AssetID:  "asset-123",
-		PageSize: 50,
-	})
+	assets, err := c.ListAssets(context.Background(), AssetParams{Symbol: "BTC", PageSize: 50})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(wallets) != 1 {
-		t.Fatalf("got %d wallets, want 1", len(wallets))
-	}
-	if wallets[0].WalletID != "w1" {
-		t.Errorf("wallet_id = %q, want %q", wallets[0].WalletID, "w1")
-	}
-	if wallets[0].Balance != "10.0" {
-		t.Errorf("balance = %q, want %q", wallets[0].Balance, "10.0")
+	if len(assets) != 1 || assets[0].Symbol != "BTC" {
+		t.Fatalf("unexpected assets: %+v", assets)
 	}
 }
 
-func TestListWallets_DefaultPageSize(t *testing.T) {
+func TestGetAsset_FoundAndNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("page_size"); got != "25" {
-			t.Errorf("default page_size = %q, want %q", got, "25")
+		if r.URL.Query().Get("id") == "a1" {
+			resp := PaginatedResponse{Data: json.RawMessage(`[{"id":"a1","name":"Bitcoin","symbol":"BTC"}]`)}
+			json.NewEncoder(w).Encode(resp)
+			return
 		}
-		resp := PaginatedResponse{
-			Data:        json.RawMessage(`[]`),
-			HasNextPage: false,
-		}
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	c := NewClient("key", false)
-	c.BaseURL = server.URL
-
-	_, err := c.ListWallets(context.Background(), WalletParams{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestListTransactions_SendsParams(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		if got := q.Get("wallet_id"); got != "w1" {
-			t.Errorf("wallet_id = %q, want %q", got, "w1")
-		}
-		if got := q.Get("flow"); got != "incoming" {
-			t.Errorf("flow = %q, want %q", got, "incoming")
-		}
-		if got := q.Get("asset_id"); got != "a1" {
-			t.Errorf("asset_id = %q, want %q", got, "a1")
-		}
-		if got := q.Get("from_including"); got != "2024-01-01" {
-			t.Errorf("from_including = %q, want %q", got, "2024-01-01")
-		}
-		if got := q.Get("to_excluding"); got != "2024-02-01" {
-			t.Errorf("to_excluding = %q, want %q", got, "2024-02-01")
-		}
-		resp := PaginatedResponse{
-			Data:        json.RawMessage(`[{"transaction_id":"tx1","asset_id":"a1","operation_type":"buy","flow":"incoming","asset_amount":"1.0","fee_amount":"0.01","credited_at":"2024-01-15","trade_id":"t1"}]`),
-			HasNextPage: false,
-		}
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	c := NewClient("key", false)
-	c.BaseURL = server.URL
-
-	txns, err := c.ListTransactions(context.Background(), TransactionParams{
-		WalletID: "w1",
-		Flow:     "incoming",
-		AssetID:  "a1",
-		From:     "2024-01-01",
-		To:       "2024-02-01",
-		PageSize: 25,
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(txns) != 1 {
-		t.Fatalf("got %d transactions, want 1", len(txns))
-	}
-	if txns[0].TransactionID != "tx1" {
-		t.Errorf("transaction_id = %q, want %q", txns[0].TransactionID, "tx1")
-	}
-	if txns[0].FeeAmount != "0.01" {
-		t.Errorf("fee_amount = %q, want %q", txns[0].FeeAmount, "0.01")
-	}
-}
-
-func TestListTransactions_OmitsEmptyParams(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		if q.Has("wallet_id") {
-			t.Error("wallet_id should not be sent when empty")
-		}
-		if q.Has("flow") {
-			t.Error("flow should not be sent when empty")
-		}
-		if q.Has("asset_id") {
-			t.Error("asset_id should not be sent when empty")
-		}
-		if q.Has("from_including") {
-			t.Error("from_including should not be sent when empty")
-		}
-		if q.Has("to_excluding") {
-			t.Error("to_excluding should not be sent when empty")
-		}
-		resp := PaginatedResponse{
-			Data:        json.RawMessage(`[]`),
-			HasNextPage: false,
-		}
-		json.NewEncoder(w).Encode(resp)
-	}))
-	defer server.Close()
-
-	c := NewClient("key", false)
-	c.BaseURL = server.URL
-
-	_, err := c.ListTransactions(context.Background(), TransactionParams{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestGetAsset_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/assets/a1" {
-			t.Errorf("path = %q, want /v1/assets/a1", r.URL.Path)
-		}
-		json.NewEncoder(w).Encode(Asset{
-			Data: AssetData{ID: "a1", Name: "Bitcoin", Symbol: "BTC"},
-		})
+		json.NewEncoder(w).Encode(PaginatedResponse{Data: json.RawMessage(`[]`)})
 	}))
 	defer server.Close()
 
@@ -424,47 +275,52 @@ func TestGetAsset_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if asset.Data.ID != "a1" {
-		t.Errorf("ID = %q, want %q", asset.Data.ID, "a1")
+	if asset == nil || asset.Name != "Bitcoin" {
+		t.Fatalf("expected Bitcoin, got %+v", asset)
 	}
-	if asset.Data.Name != "Bitcoin" {
-		t.Errorf("Name = %q, want %q", asset.Data.Name, "Bitcoin")
+
+	missing, err := c.GetAsset(context.Background(), "nope")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if asset.Data.Symbol != "BTC" {
-		t.Errorf("Symbol = %q, want %q", asset.Data.Symbol, "BTC")
+	if missing != nil {
+		t.Errorf("expected nil for missing asset, got %+v", missing)
 	}
 }
 
-func TestGetAsset_NotFound(t *testing.T) {
+func TestGetTicker_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(404)
-		w.Write([]byte(`Not Found`))
+		if r.URL.Path != "/v1/tickers/a1" {
+			t.Errorf("path = %q, want /v1/tickers/a1", r.URL.Path)
+		}
+		w.Write([]byte(`{"data":{"asset_id":"a1","price":"50000","currency_id":"eur"}}`))
 	}))
 	defer server.Close()
 
 	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
-	_, err := c.GetAsset(context.Background(), "nonexistent")
-	if err == nil {
-		t.Fatal("expected error for 404")
+	ticker, err := c.GetTicker(context.Background(), "a1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	apiErr, ok := err.(*APIError)
-	if !ok {
-		t.Fatalf("expected *APIError, got %T", err)
-	}
-	if apiErr.StatusCode != 404 {
-		t.Errorf("status = %d, want 404", apiErr.StatusCode)
+	if ticker.Price != "50000" {
+		t.Errorf("price = %q, want 50000", ticker.Price)
 	}
 }
 
-func TestFetchAllTicker_KeyedBySymbolAndID(t *testing.T) {
+func TestListOperations_SendsParams(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if got := q.Get("from"); got != "2024-01-01T00:00:00Z" {
+			t.Errorf("from = %q", got)
+		}
+		ids := q["asset_id"]
+		if len(ids) != 2 {
+			t.Errorf("asset_id count = %d, want 2", len(ids))
+		}
 		resp := PaginatedResponse{
-			Data: json.RawMessage(`[
-				{"id":"a1","name":"Bitcoin","symbol":"BTC","type":"cryptocoin","currency":"EUR","price":"50000","price_change_day":"-2.5"},
-				{"id":"a2","name":"Ethereum","symbol":"ETH","type":"cryptocoin","currency":"EUR","price":"3000","price_change_day":"1.2"}
-			]`),
+			Data:        json.RawMessage(`[{"operation_id":"op1","operation_type":"buy","transactions":[{"transaction_id":"tx1","asset_id":"a1","trade":{"trade_id":"t1"}}]}]`),
 			HasNextPage: false,
 		}
 		json.NewEncoder(w).Encode(resp)
@@ -474,66 +330,109 @@ func TestFetchAllTicker_KeyedBySymbolAndID(t *testing.T) {
 	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
-	ticker, err := c.FetchAllTicker(context.Background())
+	ops, err := c.ListOperations(context.Background(), OperationParams{
+		From:     "2024-01-01T00:00:00Z",
+		AssetIDs: []string{"a1", "a2"},
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(ticker.BySymbol) != 2 {
-		t.Fatalf("got %d BySymbol entries, want 2", len(ticker.BySymbol))
-	}
-	if len(ticker.ByID) != 2 {
-		t.Fatalf("got %d ByID entries, want 2", len(ticker.ByID))
-	}
-	btc, ok := ticker.BySymbol["BTC"]
-	if !ok {
-		t.Fatal("BTC not found in BySymbol map")
-	}
-	if btc.Price != "50000" {
-		t.Errorf("BTC price = %q, want %q", btc.Price, "50000")
-	}
-	if btc.Name != "Bitcoin" {
-		t.Errorf("BTC name = %q, want %q", btc.Name, "Bitcoin")
-	}
-	btcByID, ok := ticker.ByID["a1"]
-	if !ok {
-		t.Fatal("a1 not found in ByID map")
-	}
-	if btcByID.Symbol != "BTC" {
-		t.Errorf("a1 symbol = %q, want %q", btcByID.Symbol, "BTC")
+	if len(ops) != 1 || ops[0].Transactions[0].Trade.TradeID != "t1" {
+		t.Fatalf("unexpected operations: %+v", ops)
 	}
 }
 
-func TestListAllAssets_KeyedByID(t *testing.T) {
+func TestListCurrencies_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := PaginatedResponse{
-			Data: json.RawMessage(`[
-				{"id":"a1","name":"Bitcoin","symbol":"BTC"},
-				{"id":"a2","name":"Ethereum","symbol":"ETH"}
-			]`),
-			HasNextPage: false,
-		}
-		json.NewEncoder(w).Encode(resp)
+		w.Write([]byte(`{"data":[{"id":"c1","symbol":"EUR","name":"Euro"}]}`))
 	}))
 	defer server.Close()
 
 	c := NewClient("key", false)
 	c.BaseURL = server.URL
 
-	assets, err := c.ListAllAssets(context.Background())
+	currencies, err := c.ListCurrencies(context.Background(), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(assets) != 2 {
-		t.Fatalf("got %d assets, want 2", len(assets))
+	if len(currencies) != 1 || currencies[0].Symbol != "EUR" {
+		t.Fatalf("unexpected currencies: %+v", currencies)
 	}
-	btc, ok := assets["a1"]
-	if !ok {
-		t.Fatal("a1 not found in assets map")
+}
+
+func TestGetPortfolio_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":[{"asset_id":"a1","balance":{"value":"2.0","asset_id":"a1"},"currency_balance":{"value":"100000","currency_id":"eur"}}]}`))
+	}))
+	defer server.Close()
+
+	c := NewClient("key", false)
+	c.BaseURL = server.URL
+
+	positions, err := c.GetPortfolio(context.Background(), PortfolioParams{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if btc.Symbol != "BTC" {
-		t.Errorf("a1 symbol = %q, want %q", btc.Symbol, "BTC")
+	if len(positions) != 1 || positions[0].Balance.Value != "2.0" {
+		t.Fatalf("unexpected positions: %+v", positions)
 	}
-	if btc.Name != "Bitcoin" {
-		t.Errorf("a1 name = %q, want %q", btc.Name, "Bitcoin")
+}
+
+func TestCreateAndAcceptQuote(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/quotes":
+			w.Write([]byte(`{"data":{"quote_id":"q1","status":"OPEN","side":"BUY","quote":{"price":"50000"}}}`))
+		case "/v1/quotes/q1/accept":
+			w.Write([]byte(`{"data":{"quote_id":"q1","trade_id":"t1","status":"FINISHED","execution":{"price":"50000"}}}`))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+
+	c := NewClient("key", false)
+	c.BaseURL = server.URL
+
+	created, err := c.CreateQuote(context.Background(), CreateQuoteRequest{AssetID: "a1", CurrencyID: "eur", Side: "BUY", Notional: "10"})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	if created.QuoteID != "q1" {
+		t.Errorf("quote_id = %q, want q1", created.QuoteID)
+	}
+
+	accepted, err := c.AcceptQuote(context.Background(), "q1")
+	if err != nil {
+		t.Fatalf("accept error: %v", err)
+	}
+	if accepted.TradeID != "t1" {
+		t.Errorf("trade_id = %q, want t1", accepted.TradeID)
+	}
+}
+
+func TestExecuteEarnAction_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/earn/actions/STAKE" {
+			t.Errorf("path = %q, want /v1/earn/actions/STAKE", r.URL.Path)
+		}
+		var body map[string]json.RawMessage
+		json.NewDecoder(r.Body).Decode(&body)
+		if string(body["asset_amount"]) != "1.5" {
+			t.Errorf("asset_amount = %s, want 1.5 (as number)", body["asset_amount"])
+		}
+		w.Write([]byte(`{"data":{"status":"INITIATED"}}`))
+	}))
+	defer server.Close()
+
+	c := NewClient("key", false)
+	c.BaseURL = server.URL
+
+	result, err := c.ExecuteEarnAction(context.Background(), "STAKE", EarnActionRequest{ConfigID: "cfg1", AssetAmount: "1.5"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Status != "INITIATED" {
+		t.Errorf("status = %q, want INITIATED", result.Status)
 	}
 }

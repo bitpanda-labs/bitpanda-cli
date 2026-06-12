@@ -33,3 +33,6 @@ go.work.sum
 # Environment and config
 .env
 .env.local
+
+# Claude Code worktrees
+.claude/worktrees/

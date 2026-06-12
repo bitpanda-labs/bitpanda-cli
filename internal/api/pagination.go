@@ -9,54 +9,26 @@ import (
 	"strconv"
 )
 
-// FlexInt is an int that can be unmarshaled from both JSON numbers and strings.
-type FlexInt int
-
-func (fi *FlexInt) UnmarshalJSON(b []byte) error {
-	// Try number first
-	var n int
-	if err := json.Unmarshal(b, &n); err == nil {
-		*fi = FlexInt(n)
-		return nil
-	}
-	// Try string
-	var s string
-	if err := json.Unmarshal(b, &s); err == nil {
-		n, err := strconv.Atoi(s)
-		if err != nil {
-			return fmt.Errorf("FlexInt: cannot parse %q as int: %w", s, err)
-		}
-		*fi = FlexInt(n)
-		return nil
-	}
-	return fmt.Errorf("FlexInt: cannot unmarshal %s", string(b))
-}
-
-// PaginatedResponse represents a paginated API response with cursor fields.
-// Supports both wallets/transactions shape (end_cursor) and ticker shape (next_cursor).
+// PaginatedResponse represents a cursor-paginated API response. The public API
+// returns the next page's cursor in next_cursor, with has_next_page signalling
+// whether more pages remain.
 type PaginatedResponse struct {
-	Data            json.RawMessage `json:"data"`
-	StartCursor     string          `json:"start_cursor"`
-	EndCursor       string          `json:"end_cursor"`
-	NextCursor      string          `json:"next_cursor"`
-	HasNextPage     bool            `json:"has_next_page"`
-	HasPreviousPage bool            `json:"has_previous_page"`
-	PageSize        FlexInt         `json:"page_size"`
+	Data        json.RawMessage `json:"data"`
+	SelfCursor  string          `json:"self_cursor"`
+	NextCursor  string          `json:"next_cursor"`
+	HasNextPage bool            `json:"has_next_page"`
 }
 
-// GetNextCursor returns the cursor for the next page,
-// handling both response shapes.
+// GetNextCursor returns the cursor for the next page.
 func (p *PaginatedResponse) GetNextCursor() string {
-	if p.NextCursor != "" {
-		return p.NextCursor
-	}
-	return p.EndCursor
+	return p.NextCursor
 }
 
-// PaginateAll fetches all pages from a paginated endpoint.
-// cursorParam is the query parameter name for the cursor ("after" for wallets/transactions, "cursor" for ticker).
+// PaginateAll fetches all pages from a cursor-paginated endpoint. The cursor is
+// always passed via the "cursor" query parameter.
 // limit of 0 means no limit. progress receives a dot per page if non-nil.
-func PaginateAll(ctx context.Context, c *Client, path string, baseParams url.Values, cursorParam string, pageSize int, limit int, progress io.Writer) ([]json.RawMessage, error) {
+func PaginateAll(ctx context.Context, c *Client, path string, baseParams url.Values, pageSize int, limit int, progress io.Writer) ([]json.RawMessage, error) {
+	const cursorParam = "cursor"
 	var allItems []json.RawMessage
 	cursor := ""
 	pagesWritten := 0

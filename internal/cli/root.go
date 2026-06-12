@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/bitpanda-labs/bitpanda-cli/internal/api"
 	"github.com/bitpanda-labs/bitpanda-cli/internal/config"
 	"github.com/bitpanda-labs/bitpanda-cli/internal/output"
+	"github.com/spf13/cobra"
 )
 
 // Exit code constants for structured error reporting.
@@ -26,6 +26,7 @@ type App struct {
 	cfg       *config.Config
 	apiClient *api.Client
 	outFormat output.Format
+	assumeYes bool // skip confirmation prompts for destructive actions
 }
 
 func newApp() *cobra.Command {
@@ -34,14 +35,15 @@ func newApp() *cobra.Command {
 	var flagAPIKey string
 	var flagOutput string
 	var flagInsecure bool
+	var flagYes bool
 
 	rootCmd := &cobra.Command{
 		Use:   "bp",
 		Short: "Bitpanda CLI — interact with your Bitpanda account from the terminal",
-		Long: `bp is a command-line tool for the Bitpanda Developer API.
+		Long: `bp is a command-line tool for the Bitpanda Public API.
 
-View your portfolio, check prices, browse trades and transactions,
-all from your terminal. Supports table, JSON, and CSV output.`,
+View your portfolio, check prices, browse trades and operations, and
+place trades — all from your terminal. Supports table, JSON, and CSV output.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -51,6 +53,7 @@ all from your terminal. Supports table, JSON, and CSV output.`,
 				return err
 			}
 			app.outFormat = f
+			app.assumeYes = flagYes
 
 			// Skip config loading for help/version/completion
 			if cmd.Name() == "help" || cmd.Name() == "bp" || cmd.Name() == "completion" ||
@@ -76,16 +79,21 @@ all from your terminal. Supports table, JSON, and CSV output.`,
 	rootCmd.PersistentFlags().StringVarP(&flagOutput, "output", "o", "table", "Output format: table, json, csv")
 	rootCmd.PersistentFlags().StringVar(&flagAPIKey, "api-key", "", "Bitpanda API key (overrides env and config file)")
 	rootCmd.PersistentFlags().BoolVar(&flagInsecure, "insecure", false, "Skip TLS certificate verification")
+	rootCmd.PersistentFlags().BoolVarP(&flagYes, "yes", "y", false, "Skip confirmation prompts for trading and earn actions")
 	rootCmd.Version = Version
 	rootCmd.SetVersionTemplate("bp version {{.Version}}\n")
 
 	app.registerPortfolio(rootCmd)
-	app.registerBalances(rootCmd)
+	app.registerPortfolioHistory(rootCmd)
+	app.registerOperations(rootCmd)
 	app.registerTrades(rootCmd)
-	app.registerTransactions(rootCmd)
 	app.registerPrice(rootCmd)
 	app.registerPrices(rootCmd)
 	app.registerAsset(rootCmd)
+	app.registerAssets(rootCmd)
+	app.registerCurrencies(rootCmd)
+	app.registerEarn(rootCmd)
+	app.registerQuote(rootCmd)
 	app.registerCompletion(rootCmd)
 
 	return rootCmd

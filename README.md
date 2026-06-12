@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/github/license/bitpanda-labs/bitpanda-cli)](https://github.com/bitpanda-labs/bitpanda-cli/blob/main/LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/bitpanda-labs/bitpanda-cli)](https://github.com/bitpanda-labs/bitpanda-cli/releases/latest)
 
-A command-line tool for the [Bitpanda Developer API](https://developers.bitpanda.com/platform/). View your portfolio, check prices, browse trades and transactions — all from your terminal.
+A command-line tool for the [Bitpanda Public API](https://developers.bitpanda.com/platform/). View your portfolio, check prices, browse trades and operations, and place trades — all from your terminal.
 
 ## Installation
 
@@ -83,20 +83,36 @@ bp portfolio
 ### Portfolio
 
 ```bash
-bp portfolio              # aggregated holdings with EUR valuations
-bp portfolio --sort value # sort by EUR value (descending)
-bp portfolio -o json      # JSON output
+bp portfolio                 # holdings with valuations and returns
+bp portfolio --sort name     # sort by asset name (default: value, descending)
+bp portfolio --asset-id UUID # single position
+bp portfolio -o json         # JSON output
 ```
 
-> **Note:** The `portfolio` command uses the Bitpanda ticker API, which returns all prices in EUR. All valuations shown (EUR Price, EUR Value, TOTAL) assume EUR as the base currency. The `price` command displays the raw `Currency` field from the API response, which currently also returns EUR but is shown explicitly per asset.
+Each position shows total balance, available balance, value, invested amount,
+and total return. **Balance** includes staked or otherwise locked funds;
+**Available** is the portion free to trade. Pass `--equivalent-currency-id UUID`
+to value the portfolio in a specific currency.
 
-### Balances
+### Portfolio history
 
 ```bash
-bp balances                  # all wallets
-bp balances --non-zero       # only wallets with balance > 0
-bp balances --asset-id UUID  # filter by asset
-bp balances --limit 10       # cap results
+bp portfolio-history                   # performance over time
+bp portfolio-history --timeframe month # day, week, month, six_month, year
+```
+
+### Operations
+
+Operations are the canonical record of account activity. Each operation groups
+one or more transactions (e.g. a buy debits fiat and credits the asset).
+
+```bash
+bp operations                       # recent operations (first page)
+bp operations --all                 # full history (may be slow)
+bp operations --asset-id UUID       # filter by asset (repeatable)
+bp operations --currency-id UUID    # filter by currency (repeatable)
+bp operations --from 2024-01-01T00:00:00Z --to 2024-12-31T00:00:00Z
+bp operations -o csv                # CSV output for spreadsheets
 ```
 
 ### Trades
@@ -104,37 +120,57 @@ bp balances --limit 10       # cap results
 ```bash
 bp trades                          # recent trades (first page)
 bp trades --all                    # full trade history (may be slow)
-bp trades --operation buy          # only buys
 bp trades --asset-type cryptocoin  # only crypto trades
-bp trades --from 2024-01-01 --to 2024-06-30
+bp trades --from 2024-01-01T00:00:00Z --to 2024-06-30T00:00:00Z
 bp trades --limit 20
-```
-
-### Transactions
-
-```bash
-bp transactions                       # recent transactions (first page)
-bp transactions --all                 # full transaction history (may be slow)
-bp transactions --flow incoming       # only incoming
-bp transactions --wallet-id UUID
-bp transactions --from 2024-01-01 --to 2024-12-31
-bp transactions -o csv                # CSV output for spreadsheets
 ```
 
 ### Prices
 
+The ticker API is per-asset. `bp price` accepts a symbol (resolved via the
+assets endpoint) or an asset UUID directly.
+
 ```bash
-bp price BTC       # single asset price
+bp price BTC       # single asset price by symbol
 bp price btc       # case-insensitive
+bp price UUID      # by asset UUID
 bp prices          # prices for held assets
-bp prices --all    # all available prices
 ```
 
-### Asset lookup
+### Assets & currencies
 
 ```bash
-bp asset UUID      # asset metadata by ID
+bp asset UUID                 # asset metadata by UUID
+bp assets                     # list available assets
+bp assets --type cryptocoin   # filter by type, group, symbol, or isin
+bp currencies                 # list available fiat currencies
 ```
+
+### Earn
+
+```bash
+bp earn configs                                       # list earn configurations
+bp earn stake --config-id UUID --amount 1.5           # stake an asset
+bp earn unstake --config-id UUID --amount 1.5         # unstake an asset
+```
+
+> **Note:** `earn stake` and `earn unstake` move funds and prompt for confirmation. Pass `-y`/`--yes` to skip the prompt (e.g. in scripts).
+
+### Quotes (trading)
+
+Trading is a two-step flow: create a quote to see the price, then accept it to
+execute the trade.
+
+```bash
+# Create a quote (does not execute)
+bp quote create --asset-id UUID --currency-id UUID --side buy --notional 100
+bp quote create --asset-id UUID --currency-id UUID --side sell --quantity 0.5
+
+# Accept a quote to execute the trade
+bp quote accept QUOTE_ID
+```
+
+> **Note:** `quote accept` executes a real trade and prompts for confirmation. Pass `-y`/`--yes` to skip the prompt. Provide exactly one of `--notional` (currency amount) or `--quantity` (asset amount) when creating a quote.
 
 ### Shell Completion
 
