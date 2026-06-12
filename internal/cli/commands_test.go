@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/bitpanda-labs/bitpanda-cli/internal/output"
 )
 
 func TestRunPortfolio_EnrichesAndSorts(t *testing.T) {
@@ -39,19 +41,54 @@ func TestRunPortfolio_EnrichesAndSorts(t *testing.T) {
 	}
 
 	rows := parseJSONOutput(t, raw)
-	// 2 assets + TOTAL, sorted by value descending => BTC first.
-	if len(rows) != 3 {
-		t.Fatalf("expected 3 rows, got %d: %v", len(rows), rows)
+	// 2 assets, sorted by value descending => BTC first. The TOTAL summary row
+	// must NOT appear in JSON output (it is a table-only footer).
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d: %v", len(rows), rows)
 	}
 	if rows[0]["Asset"] != "BTC" {
 		t.Errorf("expected BTC first (highest value), got %s", rows[0]["Asset"])
 	}
-	if rows[2]["Asset"] != "TOTAL" || rows[2]["Value"] != "230000.00" {
-		t.Errorf("unexpected TOTAL row: %v", rows[2])
+	for _, r := range rows {
+		if r["Asset"] == "TOTAL" {
+			t.Errorf("TOTAL row leaked into JSON output: %v", r)
+		}
 	}
 	// Available balance should be surfaced as its own column.
 	if _, ok := rows[0]["Available"]; !ok {
 		t.Errorf("expected Available column, got: %v", rows[0])
+	}
+}
+
+func TestRunPortfolio_TotalRowOnlyInTable(t *testing.T) {
+	server := newMockServer(t, mockEndpoints{
+		"/v1/portfolio": func(w http.ResponseWriter, r *http.Request) {
+			w.Write(listJSON(t, []map[string]interface{}{
+				{"asset_id": "a1", "balance": map[string]string{"value": "2.0"}, "currency_balance": map[string]string{"value": "200000"}},
+			}))
+		},
+		"/v1/assets": func(w http.ResponseWriter, r *http.Request) {
+			w.Write(paginatedJSON(t, []map[string]string{{"id": "a1", "name": "Bitcoin", "symbol": "BTC"}}))
+		},
+		"/v1/currencies": func(w http.ResponseWriter, r *http.Request) {
+			w.Write(listJSON(t, []map[string]string{}))
+		},
+	})
+	defer server.Close()
+
+	app := newTestApp(server.URL)
+	app.outFormat = output.FormatTable
+	cmd := newTestCmd()
+
+	var runErr error
+	raw := captureStdout(t, func() {
+		runErr = app.runPortfolio(cmd, "value", "", "", "")
+	})
+	if runErr != nil {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+	if !strings.Contains(raw, "TOTAL") {
+		t.Errorf("expected TOTAL footer in table output, got:\n%s", raw)
 	}
 }
 
@@ -186,6 +223,32 @@ func TestRunCurrencies(t *testing.T) {
 	}
 }
 
+func TestRunQuoteCreate_RejectsNonNumericAmountBeforeAPICall(t *testing.T) {
+	called := false
+	server := newMockServer(t, mockEndpoints{
+		"/v1/quotes": func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			w.Write([]byte(`{"data":{"quote_id":"q1"}}`))
+		},
+	})
+	defer server.Close()
+
+	app := newTestApp(server.URL)
+	cmd := newTestCmd()
+
+	// ".5" is not a valid JSON number; it must be rejected up front.
+	err := app.runQuoteCreate(cmd, "a1", "c1", "buy", ".5", "")
+	if err == nil {
+		t.Fatal("expected validation error for --quantity \".5\", got nil")
+	}
+	if !strings.Contains(err.Error(), "quantity") {
+		t.Errorf("error should name the quantity flag, got: %v", err)
+	}
+	if called {
+		t.Error("API was called despite invalid --quantity")
+	}
+}
+
 func TestRunQuoteAccept_AbortsWithoutConfirmation(t *testing.T) {
 	called := false
 	server := newMockServer(t, mockEndpoints{
@@ -211,6 +274,47 @@ func TestRunQuoteAccept_AbortsWithoutConfirmation(t *testing.T) {
 	}
 	if !strings.Contains(errBuf.String(), "Aborted") {
 		t.Errorf("expected Aborted message, got %q", errBuf.String())
+	}
+}
+
+func TestValidateAmount(t *testing.T) {
+	valid := []string{"1.5", "0.5", "1", "1e3", "0.00000001", "100000"}
+	for _, amt := range valid {
+		if err := validateAmount("amount", amt); err != nil {
+			t.Errorf("validateAmount(%q) = %v, want nil", amt, err)
+		}
+	}
+
+	invalid := []string{"", ".5", "1,5", "NaN", "Inf", "abc", "0", "-1", "00.5", "0x1"}
+	for _, amt := range invalid {
+		if err := validateAmount("amount", amt); err == nil {
+			t.Errorf("validateAmount(%q) = nil, want error", amt)
+		}
+	}
+}
+
+func TestRunEarnAction_RejectsInvalidAmountBeforeAPICall(t *testing.T) {
+	called := false
+	server := newMockServer(t, mockEndpoints{
+		"/v1/earn/actions/": func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			w.Write([]byte(`{"data":{"status":"INITIATED"}}`))
+		},
+	})
+	defer server.Close()
+
+	app := newTestApp(server.URL)
+	app.assumeYes = true
+	cmd := newTestCmd()
+
+	// ".5" passes a naive ParseFloat but is not a valid JSON number; it must be
+	// rejected up front rather than failing later during request encoding.
+	err := app.runEarnAction(cmd, "STAKE", "cfg1", "", ".5")
+	if err == nil {
+		t.Fatal("expected validation error for amount \".5\", got nil")
+	}
+	if called {
+		t.Error("API was called despite invalid amount")
 	}
 }
 

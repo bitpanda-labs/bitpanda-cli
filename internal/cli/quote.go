@@ -57,6 +57,16 @@ func (app *App) runQuoteCreate(cmd *cobra.Command, assetID, currencyID, side, qu
 	if (quantity == "") == (notional == "") {
 		return fmt.Errorf("exactly one of --quantity or --notional must be provided")
 	}
+	if quantity != "" {
+		if err := validateAmount("quantity", quantity); err != nil {
+			return err
+		}
+	}
+	if notional != "" {
+		if err := validateAmount("notional", notional); err != nil {
+			return err
+		}
+	}
 
 	resp, err := app.apiClient.CreateQuote(cmd.Context(), api.CreateQuoteRequest{
 		AssetID:    assetID,

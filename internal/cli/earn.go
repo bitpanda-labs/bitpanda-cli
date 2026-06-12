@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -109,8 +110,8 @@ func (app *App) registerEarnAction(parent *cobra.Command, name, apiAction string
 }
 
 func (app *App) runEarnAction(cmd *cobra.Command, apiAction, configID, walletID, amount string) error {
-	if _, err := strconv.ParseFloat(amount, 64); err != nil {
-		return fmt.Errorf("invalid --amount %q: must be a number", amount)
+	if err := validateAmount("amount", amount); err != nil {
+		return err
 	}
 
 	prompt := fmt.Sprintf("%s %s of config %s?", cases(apiAction), amount, configID)
@@ -131,6 +132,26 @@ func (app *App) runEarnAction(cmd *cobra.Command, apiAction, configID, walletID,
 	columns := []string{"Action", "Config ID", "Amount", "Status"}
 	rows := [][]string{{apiAction, configID, amount, result.Status}}
 	return output.Render(app.outFormat, columns, rows)
+}
+
+// validateAmount checks that value is a positive, non-zero decimal that is also
+// a valid JSON number literal. The literal check matches what the API layer sends
+// (json.Number), so inputs like ".5", "1,5", or "NaN" are rejected here with a
+// clear message instead of failing later during request encoding. The server
+// additionally requires a positive value, enforced here too. flag is the name of
+// the originating CLI flag (e.g. "amount", "quantity") used in error messages.
+func validateAmount(flag, value string) error {
+	if !json.Valid([]byte(value)) {
+		return fmt.Errorf("invalid --%s %q: must be a number (e.g. 1.5, not .5)", flag, value)
+	}
+	v, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return fmt.Errorf("invalid --%s %q: must be a number", flag, value)
+	}
+	if v <= 0 {
+		return fmt.Errorf("invalid --%s %q: must be greater than zero", flag, value)
+	}
+	return nil
 }
 
 // cases title-cases a lowercase/uppercase word for display (e.g. "stake" -> "Stake").

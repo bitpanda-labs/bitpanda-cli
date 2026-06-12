@@ -117,7 +117,12 @@ func (app *App) runPortfolio(cmd *cobra.Command, sortFlag, assetID, currencyID, 
 			r.symbol, r.name, r.balance, r.available, r.value, r.invested, r.ret, r.retPct,
 		})
 	}
-	tableRows = append(tableRows, []string{"TOTAL", "", "", "", strconv.FormatFloat(total, 'f', 2, 64), "", "", ""})
+	// The TOTAL summary row is a human-readable footer; appending it to JSON or
+	// CSV output would surface a phantom holding to programmatic consumers, so
+	// it is only rendered in table format.
+	if app.outFormat == output.FormatTable {
+		tableRows = append(tableRows, []string{"TOTAL", "", "", "", strconv.FormatFloat(total, 'f', 2, 64), "", "", ""})
+	}
 
 	return output.Render(app.outFormat, columns, tableRows)
 }

@@ -117,8 +117,11 @@ func TestTradesFiltersByAssetType(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	if !strings.Contains(stdout, "[]") && strings.Contains(stdout, "trade1") {
-		t.Errorf("expected no stock trades, got: %s", stdout)
+	if strings.Contains(stdout, "trade1") {
+		t.Errorf("expected no stock trades, but trade1 was present: %s", stdout)
+	}
+	if !strings.Contains(stdout, "[]") {
+		t.Errorf("expected empty JSON array for stock filter, got: %s", stdout)
 	}
 
 	// Filtering by cryptocoin keeps trade1.

@@ -75,10 +75,11 @@ type EarnActionResult struct {
 // ExecuteEarnAction stakes or unstakes (action must be "STAKE" or "UNSTAKE").
 func (c *Client) ExecuteEarnAction(ctx context.Context, action string, req EarnActionRequest) (*EarnActionResult, error) {
 	// asset_amount is typed as a JSON number upstream; marshal it as such while
-	// keeping the CLI-facing value a string.
+	// keeping the CLI-facing value a string. json.Number validates the literal
+	// and preserves full precision (no float64 round-trip).
 	payload := map[string]any{
 		"config_id":    req.ConfigID,
-		"asset_amount": json.RawMessage(req.AssetAmount),
+		"asset_amount": json.Number(req.AssetAmount),
 	}
 	if req.WalletID != "" {
 		payload["wallet_id"] = req.WalletID
