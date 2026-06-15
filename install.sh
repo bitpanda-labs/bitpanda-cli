@@ -57,6 +57,40 @@ trap 'rm -rf "$TMPDIR_INSTALL"' EXIT
 echo "Downloading ${FILENAME}..."
 curl -fsSL "$URL" -o "${TMPDIR_INSTALL}/${FILENAME}"
 
+# Verify checksum before extracting/installing
+echo "Verifying checksum..."
+CHECKSUMS_URL="https://github.com/${REPO}/releases/download/v${VERSION}/checksums.txt"
+if ! curl -fsSL "$CHECKSUMS_URL" -o "${TMPDIR_INSTALL}/checksums.txt"; then
+    echo "Error: checksum verification failed for ${FILENAME}: could not download checksums.txt" >&2
+    exit 1
+fi
+
+# Determine which SHA-256 tool is available
+if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL_HASH=$(sha256sum "${TMPDIR_INSTALL}/${FILENAME}" | cut -d' ' -f1)
+elif command -v shasum >/dev/null 2>&1; then
+    ACTUAL_HASH=$(shasum -a 256 "${TMPDIR_INSTALL}/${FILENAME}" | cut -d' ' -f1)
+else
+    echo "Error: no SHA-256 tool found (need 'sha256sum' or 'shasum')" >&2
+    exit 1
+fi
+
+# Extract the expected hash for this filename from checksums.txt
+# Format per line: <hash>  <filename>
+EXPECTED_HASH=$(grep " ${FILENAME}\$" "${TMPDIR_INSTALL}/checksums.txt" | cut -d' ' -f1)
+if [ -z "$EXPECTED_HASH" ]; then
+    echo "Error: checksum verification failed for ${FILENAME}: not found in checksums.txt" >&2
+    exit 1
+fi
+
+if [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
+    echo "Error: checksum verification failed for ${FILENAME}" >&2
+    echo "  expected: ${EXPECTED_HASH}" >&2
+    echo "  actual:   ${ACTUAL_HASH}" >&2
+    exit 1
+fi
+echo "Checksum verified."
+
 echo "Extracting..."
 if [ "$EXT" = "zip" ]; then
     unzip -q "${TMPDIR_INSTALL}/${FILENAME}" -d "$TMPDIR_INSTALL"

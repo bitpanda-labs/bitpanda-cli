@@ -88,7 +88,7 @@ func (c *Client) ExecuteEarnAction(ctx context.Context, action string, req EarnA
 	var resp struct {
 		Data EarnActionResult `json:"data"`
 	}
-	if err := c.PostJSON(ctx, "/v1/earn/actions/"+action, payload, &resp); err != nil {
+	if err := c.PostJSON(ctx, "/v1/earn/actions/"+url.PathEscape(action), payload, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil

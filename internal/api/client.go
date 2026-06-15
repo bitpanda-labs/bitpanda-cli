@@ -7,11 +7,13 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -43,6 +45,17 @@ func NewClient(apiKey string, insecure bool) *Client {
 		HTTPClient: &http.Client{
 			Timeout:   30 * time.Second,
 			Transport: transport,
+			// CheckRedirect follows redirects but strips the API key when a
+			// redirect changes hosts, so the key is never leaked cross-host.
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) >= 10 {
+					return errors.New("stopped after 10 redirects")
+				}
+				if len(via) > 0 && req.URL.Host != via[0].URL.Host {
+					req.Header.Del("X-Api-Key")
+				}
+				return nil
+			},
 		},
 	}
 }
@@ -161,8 +174,25 @@ func sanitizeBody(b []byte) string {
 	}
 
 	s := htmlTagRe.ReplaceAllString(string(b), "")
+	s = stripControlChars(s)
 	if len(s) > 200 {
 		s = s[:200] + "..."
 	}
 	return s
+}
+
+// stripControlChars removes non-printable control characters (bytes < 0x20
+// and DEL 0x7f) so a hostile endpoint cannot inject ANSI escape or other
+// terminal control sequences. Common whitespace (space, tab, newline,
+// carriage return) is preserved.
+func stripControlChars(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' || r == '\n' || r == '\r' {
+			return r
+		}
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
 }

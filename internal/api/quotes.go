@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/url"
 )
 
 // CreateQuoteRequest is the payload for creating a trading quote. Exactly one of
@@ -80,7 +81,7 @@ func (c *Client) AcceptQuote(ctx context.Context, quoteID string) (*AcceptQuoteR
 	var resp struct {
 		Data AcceptQuoteResponse `json:"data"`
 	}
-	if err := c.PostJSON(ctx, "/v1/quotes/"+quoteID+"/accept", nil, &resp); err != nil {
+	if err := c.PostJSON(ctx, "/v1/quotes/"+url.PathEscape(quoteID)+"/accept", nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil

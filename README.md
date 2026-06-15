@@ -76,6 +76,8 @@ chmod 600 ~/.config/bitpanda/config.yaml
 bp portfolio
 ```
 
+> **Warning:** The `--api-key` flag is the least secure option — command-line arguments are visible in process listings (`ps`, `/proc`) and may be recorded in your shell history. Prefer the `BITPANDA_API_KEY` environment variable or the config file.
+
 > **Tip:** `bp` will warn on stderr if the config file has permissions more permissive than `0600`. Since the file contains your API key, restrict access with `chmod 600 ~/.config/bitpanda/config.yaml`.
 
 ## Usage

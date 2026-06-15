@@ -18,7 +18,7 @@ func (c *Client) GetTicker(ctx context.Context, assetID string) (*Ticker, error)
 	var resp struct {
 		Data Ticker `json:"data"`
 	}
-	if err := c.GetJSON(ctx, "/v1/tickers/"+assetID, url.Values{}, &resp); err != nil {
+	if err := c.GetJSON(ctx, "/v1/tickers/"+url.PathEscape(assetID), url.Values{}, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil

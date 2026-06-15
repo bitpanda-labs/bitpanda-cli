@@ -4,6 +4,8 @@ package cli
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 
 	"github.com/bitpanda-labs/bitpanda-cli/internal/api"
@@ -11,6 +13,20 @@ import (
 	"github.com/bitpanda-labs/bitpanda-cli/internal/output"
 	"github.com/spf13/cobra"
 )
+
+// isLoopbackHost reports whether host is the loopback name "localhost" or a
+// loopback IP address (e.g. 127.0.0.1, ::1). Used to permit plain http:// base
+// URLs for local development without weakening the https requirement for
+// remote endpoints.
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
 
 // Exit code constants for structured error reporting.
 const (
@@ -68,9 +84,30 @@ place trades — all from your terminal. Supports table, JSON, and CSV output.`,
 			}
 			app.cfg = c
 			app.apiClient = api.NewClient(app.cfg.APIKey, flagInsecure)
-			if app.cfg.BaseURL != "" {
-				app.apiClient.BaseURL = app.cfg.BaseURL
+
+			if flagInsecure {
+				fmt.Fprintln(cmd.ErrOrStderr(), "Warning: --insecure disables TLS certificate verification; your API key and data may be exposed to network attackers.")
 			}
+
+			if app.cfg.BaseURL != "" {
+				u, err := url.Parse(app.cfg.BaseURL)
+				if err != nil {
+					return fmt.Errorf("invalid BITPANDA_BASE_URL %q: %w", app.cfg.BaseURL, err)
+				}
+				if u.Host == "" {
+					return fmt.Errorf("invalid BITPANDA_BASE_URL %q: missing host", app.cfg.BaseURL)
+				}
+				// Require https:// for remote hosts so the API key is never sent in
+				// cleartext. Plain http:// is permitted only for loopback addresses
+				// (local dev/test), where there is no network to intercept, or when
+				// the user explicitly opts out with --insecure.
+				if u.Scheme != "https" && !flagInsecure && !isLoopbackHost(u.Hostname()) {
+					return fmt.Errorf("BITPANDA_BASE_URL %q must use https:// (pass --insecure to allow non-https endpoints)", app.cfg.BaseURL)
+				}
+				app.apiClient.BaseURL = app.cfg.BaseURL
+				fmt.Fprintf(cmd.ErrOrStderr(), "Note: using non-default API endpoint %s\n", app.cfg.BaseURL)
+			}
+
 			app.apiClient.SetUserAgent(Version)
 			return nil
 		},
