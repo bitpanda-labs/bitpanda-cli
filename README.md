@@ -57,7 +57,7 @@ Download from [Releases](https://github.com/bitpanda-labs/bitpanda-cli/releases/
 
 ## Configuration
 
-`bp` needs a Bitpanda API key. Get one at [bitpanda.com/my-account/apikey](https://web.bitpanda.com/my-account/apikey).
+`bp` needs a Bitpanda API key. Get one at [app.bitpanda.com/my-account/apikey](https://app.bitpanda.com/my-account/apikey).
 
 Three ways to provide it (in priority order):
 
