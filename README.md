@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/github/license/bitpanda-labs/bitpanda-cli)](https://github.com/bitpanda-labs/bitpanda-cli/blob/main/LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/bitpanda-labs/bitpanda-cli)](https://github.com/bitpanda-labs/bitpanda-cli/releases/latest)
 
-A command-line tool for the [Bitpanda Public API](https://developers.bitpanda.com/platform/). View your portfolio, check prices, browse trades and operations, and place trades — all from your terminal.
+A command-line tool for the [Bitpanda Public API](https://docs.public.bitpanda.com/). View your portfolio, check prices, browse trades and operations, and place trades — all from your terminal.
 
 ## Installation
 

@@ -35,7 +35,12 @@ const (
 	ExitAPI     = 3 // other API error
 )
 
-var Version = "0.1.0"
+// Version is the single source of truth for the CLI version. It defaults to
+// "dev" for local builds and is overridden at release time via linker ldflags
+// (-X github.com/bitpanda-labs/bitpanda-cli/internal/cli.Version=...). Both the
+// --version output and the API User-Agent (via SetUserAgent below) derive from
+// this value.
+var Version = "dev"
 
 // App holds the shared state for the CLI, replacing package-level globals.
 type App struct {

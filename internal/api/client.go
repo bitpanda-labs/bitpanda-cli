@@ -1,4 +1,4 @@
-// Package api provides an HTTP client for the Bitpanda Developer API,
+// Package api provides an HTTP client for the Bitpanda Public API,
 // including authentication, pagination, and typed endpoint methods.
 package api
 
@@ -17,10 +17,15 @@ import (
 	"time"
 )
 
-const DefaultBaseURL = "https://developer.bitpanda.com"
+const DefaultBaseURL = "https://api.public.bitpanda.com"
 
 const (
-	defaultUserAgent = "bitpanda-cli/0.1.0"
+	// defaultUserAgent is a version-agnostic fallback used only when a caller
+	// never invokes SetUserAgent. The CLI always overrides this with the real
+	// linker-injected Version (see internal/cli.Version), so it cannot go stale.
+	// It carries no hardcoded release number; "dev" mirrors the in-code Version
+	// default.
+	defaultUserAgent = "bitpanda-cli/dev"
 	maxResponseSize  = 10 << 20 // 10 MB
 )
 
